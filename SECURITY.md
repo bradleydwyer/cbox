@@ -33,20 +33,50 @@ cbox has undergone comprehensive security auditing and implements multiple secur
 
 ## Security Considerations
 
-### Network Access
-- Container has full network access (no egress firewall)
-- Can connect to any external service
-- Suitable for development, not production isolation
+### Complete Shared Resources Documentation
 
-### Mounted Directories
-- Working directory has full read/write access
-- ~/.claude directory is mounted (contains auth tokens)
-- Only use with trusted repositories and projects
+**IMPORTANT**: For a comprehensive list of ALL shared resources between your host and the container, including:
+- 7 persistent volume mounts
+- 6 tmpfs RAM-based mounts  
+- 6 environment variables
+- Docker security capabilities
+- Network access details
+
+Please see the [Complete Shared Resources Documentation](README.md#complete-shared-resources-documentation) section in the README.
+
+### Network Access
+- Container has **FULL, UNRESTRICTED** network access (no egress firewall)
+- Can connect to ANY external service or website
+- Can access local network and host services
+- Can download/upload data without restrictions
+- Suitable for development, **NOT** for production isolation
+
+### Mounted Directories and Files
+The container has access to these host resources:
+- **Working directory**: Full read/write access to your project
+- **~/.claude/**: Full access to Claude agents and settings
+- **~/.claude.json**: Contains your Claude API authentication token
+- **~/.gitconfig**: Read-only access to Git configuration
+- **~/.ssh/known_hosts**: Read-only access to SSH known hosts
+- **~/.git-credentials**: Read-only access to Git credentials (if exists)
+- **SSH Agent Socket**: Can use your SSH keys for Git operations
+
+**Critical**: Only use with trusted repositories and projects.
+
+### Memory Overhead
+The tmpfs mounts consume up to 1.4 GB of RAM:
+- `/tmp`: 512 MB
+- `/home/host/.cache`: 512 MB  
+- `/home/host/.npm`: 256 MB
+- `/run`: 64 MB
+- `/var/tmp`: 64 MB
+- `/home/host/bin`: 64 MB
 
 ### Permission Model
 - Uses `--dangerously-skip-permissions` flag for Claude Code
 - Gives Claude broad access within the container
-- Files created maintain host user ownership
+- Container runs with specific Linux capabilities (CHOWN, DAC_OVERRIDE, FOWNER, SETUID, SETGID)
+- Files created maintain host user ownership via UID/GID mapping
 
 ## Vulnerability Reporting
 

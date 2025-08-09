@@ -13,6 +13,16 @@
 > This tool is provided as-is without guarantees. Use at your own risk and thoroughly test in isolated environments before any critical usage.
 > Consider this an alpha-quality proof of concept that may have unexpected behaviors, security implications, or breaking changes.
 
+> 🔴 **SECURITY NOTICE: This tool shares significant resources with the Docker container** 🔴
+>
+> - **Your Claude API token** (`~/.claude.json`) is accessible to the container
+> - **Your entire working directory** has full read/write access from the container
+> - **Your Git configuration and SSH agent** are exposed to the container
+> - **The container has UNRESTRICTED network access** to any service
+> - **Up to 1.4 GB of RAM** is used for temporary filesystems
+> 
+> See [Complete Shared Resources Documentation](#complete-shared-resources-documentation) for full details.
+
 A simple Docker-based sandbox for running Claude Code with full network access and SSH agent forwarding.
 
 ## What is cbox?
@@ -187,6 +197,115 @@ SSH Agent        ─────socket───>  /ssh-agent
 3. **User mapping**: Uses gosu to ensure files created in container have proper host ownership
 4. **Runs Claude**: Launches `claude --dangerously-skip-permissions` in the container
 
+## Complete Shared Resources Documentation
+
+> ⚠️ **CRITICAL SECURITY INFORMATION** ⚠️
+> 
+> This section documents ALL resources shared between your host system and the Docker container.
+> Understanding these shared resources is essential for security awareness.
+
+### 1. Persistent Volume Mounts (Host Files/Directories)
+
+These directories and files from your host system are directly accessible to the container:
+
+| Host Path | Container Path | Access | Purpose | Security Impact |
+|-----------|---------------|--------|---------|-----------------|
+| **Your working directory** | `/work` | **Read/Write** | Project files you're working on | ⚠️ **FULL ACCESS**: Container can read, modify, or delete ANY file in this directory |
+| `$SSH_AUTH_SOCK` (socket) | `/ssh-agent` | **Read/Write** | SSH agent forwarding | ⚠️ Container can use your SSH keys for Git operations (keys stay on host) |
+| `~/.claude/` | `/home/host/.claude` | **Read/Write** | Claude agents and settings | ⚠️ Container can access all your custom Claude agents |
+| `~/.claude.json` | `/home/host/.claude.json` | **Read/Write** | Claude authentication | 🔴 **CRITICAL**: Contains your Claude API authentication token |
+| `~/.gitconfig` | `/home/host/.gitconfig` | **Read-Only** | Git configuration | Container can see your Git username, email, and settings |
+| `~/.ssh/known_hosts` | `/home/host/.ssh/known_hosts` | **Read-Only** | SSH known hosts | Container can see which SSH servers you've connected to |
+| `~/.git-credentials` (if exists) | `/home/host/.git-credentials` | **Read-Only** | Git credentials helper | ⚠️ May contain stored Git authentication tokens |
+
+**Security Warning**: The container has FULL read/write access to your working directory and Claude configuration. Only use cbox with trusted projects.
+
+### 2. Temporary File Systems (tmpfs Mounts)
+
+These are RAM-based temporary filesystems created for the container. They consume memory but provide fast, isolated storage:
+
+| Container Path | Size Limit | Mount Options | Purpose | Memory Impact |
+|----------------|------------|---------------|---------|---------------|
+| `/tmp` | 512 MB | `rw,noexec,nosuid` | General temporary files | Uses up to 512 MB of RAM |
+| `/run` | 64 MB | `rw,noexec,nosuid` | Runtime state files | Uses up to 64 MB of RAM |
+| `/var/tmp` | 64 MB | `rw,noexec,nosuid` | Variable temporary data | Uses up to 64 MB of RAM |
+| `/home/host/.cache` | 512 MB | `rw,noexec,nosuid` | User cache directory | Uses up to 512 MB of RAM |
+| `/home/host/.npm` | 256 MB | `rw,noexec,nosuid` | NPM package cache | Uses up to 256 MB of RAM |
+| `/home/host/bin` | 64 MB | `rw,noexec,nosuid` | User binaries (Hermit) | Uses up to 64 MB of RAM |
+
+**Total Maximum RAM Usage from tmpfs**: 1,472 MB (~1.4 GB)
+
+**Note**: These are maximum limits. Actual RAM usage depends on what the container writes to these directories. The `noexec` flag prevents execution of binaries from these locations for security.
+
+### 3. Environment Variables Passed to Container
+
+The following environment variables from your host are shared with the container:
+
+| Variable | Value/Source | Purpose | Security Impact |
+|----------|-------------|---------|-----------------|
+| `HOME` | `/home/host` | User home directory in container | Sets container user's home |
+| `USER` | `host` | Username in container | Identifies container user |
+| `TERM` | Your terminal type | Terminal capabilities | Enables proper terminal display |
+| `SSH_AUTH_SOCK` | `/ssh-agent` | SSH agent socket location | Enables SSH key usage |
+| `HOST_UID` | Your user ID | User ID mapping | Ensures proper file ownership |
+| `HOST_GID` | Your group ID | Group ID mapping | Ensures proper group ownership |
+
+### 4. Docker Security Configuration
+
+The container runs with specific security constraints:
+
+#### Dropped Capabilities (Security Hardening)
+- **ALL capabilities dropped by default** via `--cap-drop=ALL`
+- This removes all Linux capabilities initially for maximum security
+
+#### Added Capabilities (Required for Operation)
+- `CHOWN`: Change file ownership (needed for user mapping)
+- `DAC_OVERRIDE`: Override file permissions (needed for file operations)
+- `FOWNER`: Bypass permission checks on files you own
+- `SETUID`: Set user ID (needed for gosu user switching)
+- `SETGID`: Set group ID (needed for group switching)
+
+#### Additional Security Settings
+- `--security-opt=no-new-privileges`: Prevents privilege escalation
+- `--memory 2g`: Limits container to 2GB RAM (configurable)
+- `--cpus 2`: Limits container to 2 CPU cores (configurable)
+
+### 5. Network Access
+
+⚠️ **IMPORTANT**: The container has **FULL, UNRESTRICTED network access**:
+- Can connect to ANY internet service
+- Can access your local network
+- Can reach host services via `host.docker.internal`
+- No firewall or egress filtering
+- Can download/upload data without restrictions
+
+### 6. What Is NOT Shared
+
+For security, these are explicitly NOT shared with the container:
+- Your SSH private keys (only the agent socket is shared)
+- System directories (/etc, /usr, /bin, /sbin, /boot, /sys, /proc)
+- Other user home directories
+- Host system packages and binaries
+- Docker socket (container cannot control Docker)
+- Host network namespace (uses bridge network)
+
+### 7. Data Persistence
+
+**Important**: Only data written to `/work` (your mounted directory) persists after the container stops. Everything else is ephemeral:
+- Files in `/tmp`, `/var/tmp`, etc. are lost when container stops
+- NPM packages in `/home/host/.npm` must be reinstalled each run
+- Changes to `/home/host/.cache` are not preserved
+
+### 8. Security Recommendations
+
+1. **Only use cbox with projects you trust** - The container can modify your project files
+2. **Be aware of your Claude token** - It's accessible to the container via `~/.claude.json`
+3. **Review your working directory** - Everything in it is fully accessible
+4. **Monitor memory usage** - tmpfs mounts consume RAM from your system
+5. **Understand network access** - The container can communicate with any network service
+6. **Keep sensitive files outside the working directory** - They would be fully accessible
+7. **Use SSH agent forwarding** - Don't copy SSH keys into the working directory
+
 ## Authentication
 
 cbox automatically uses your host Claude authentication:
@@ -211,12 +330,38 @@ cbox automatically uses your host Claude authentication:
 - **Mount permissions**: Sensitive files like Git config mounted as read-only
 - **Working directory**: Full read/write access to mounted project directory
 
-## Security notes
+## Security Notes - MUST READ
 
-- `--dangerously-skip-permissions` gives Claude broad access within the container
-- The container has full network access (no firewall)
-- Your `~/.claude` directory (including auth tokens) is mounted
-- Only use on trusted repositories and projects
+### What cbox Exposes to the Container
+
+🔴 **Critical Security Information**:
+1. **Your Claude API authentication token** via `~/.claude.json` - This is your API key
+2. **Complete read/write access** to your entire working directory - All files can be modified or deleted
+3. **Your SSH agent** - Container can use your SSH keys for Git operations (keys remain on host)
+4. **Your Git identity and configuration** - Username, email, and all Git settings
+5. **Unrestricted internet access** - Can connect to any website or service without limitations
+6. **Up to 1.4 GB of your system RAM** for temporary filesystems
+
+### Security Best Practices
+
+- **ONLY use cbox with projects you completely trust**
+- **NEVER run cbox in directories containing sensitive data** (passwords, private keys, etc.)
+- **Be aware that your Claude API token is exposed** - The container can see it
+- **Understand that the container can modify any file** in your working directory
+- **Monitor network activity** if working with untrusted code
+- **Review the [Complete Shared Resources Documentation](#complete-shared-resources-documentation)** to understand all shared resources
+
+### Why These Resources Are Shared
+
+Each shared resource serves a specific purpose:
+- **Claude token**: Enables Claude Code to authenticate with the API
+- **Working directory**: Allows Claude to read and modify your project files
+- **SSH agent**: Enables Git push/pull to private repositories
+- **Git config**: Maintains your Git identity for commits
+- **Network access**: Allows package installation and API access
+- **tmpfs mounts**: Provides fast temporary storage without writing to disk
+
+If you're uncomfortable with any of these shared resources, **do not use cbox**.
 
 ## Maintenance
 
