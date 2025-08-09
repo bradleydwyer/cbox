@@ -163,7 +163,7 @@ if [[ ! -f "$DOCKERFILE" ]]; then
   cat >"$DOCKERFILE" <<'EOF'
 FROM node:20-bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git openssh-client ca-certificates tini bash less && \
+    git openssh-client ca-certificates tini bash less curl wget && \
     rm -rf /var/lib/apt/lists/*
 RUN npm i -g @anthropic-ai/claude-code@latest
 # Create an entrypoint script that sets up the user properly
