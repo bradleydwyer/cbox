@@ -25,12 +25,25 @@ A simple Docker-based sandbox for running Claude Code with full network access a
 1. Clone this repository or copy the `cbox` script
 2. Make it executable: `chmod +x cbox`
 3. Add to your PATH:
+
+   **For bash users:**
    ```bash
    # Option 1: Copy to a directory already in PATH
    sudo cp cbox /usr/local/bin/
    
-   # Option 2: Add this directory to PATH
-   export PATH="$PATH:/path/to/cbox"
+   # Option 2: Add this directory to PATH (add to ~/.bashrc for permanent)
+   echo 'export PATH="$PATH:/path/to/cbox"' >> ~/.bashrc
+   source ~/.bashrc
+   ```
+
+   **For zsh users:**
+   ```bash
+   # Option 1: Copy to a directory already in PATH
+   sudo cp cbox /usr/local/bin/
+   
+   # Option 2: Add this directory to PATH (add to ~/.zshrc for permanent)
+   echo 'export PATH="$PATH:/path/to/cbox"' >> ~/.zshrc
+   source ~/.zshrc
    ```
 
 ## Usage
