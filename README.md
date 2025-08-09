@@ -1,5 +1,12 @@
 # cbox - Claude Code Sandbox
 
+[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](https://github.com/bradleydwyer/cbox/releases)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Docker](https://img.shields.io/badge/docker-%3E%3D20.10-blue.svg)](https://www.docker.com/)
+[![Platform](https://img.shields.io/badge/platform-linux%20%7C%20macos%20%7C%20wsl-lightgrey.svg)](README.md#system-requirements)
+[![Shell](https://img.shields.io/badge/shell-bash%20%7C%20zsh-green.svg)](README.md#prerequisites)
+[![Maintenance](https://img.shields.io/badge/maintained-yes-brightgreen.svg)](https://github.com/bradleydwyer/cbox/commits/main)
+
 A simple Docker-based sandbox for running Claude Code with full network access and SSH agent forwarding.
 
 ## What is cbox?
@@ -36,7 +43,7 @@ A simple Docker-based sandbox for running Claude Code with full network access a
 
 ```bash
 # Download and run the installation script
-curl -fsSL https://raw.githubusercontent.com/yourusername/cbox/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/bradleydwyer/cbox/main/install.sh | bash
 
 # Verify installation
 cbox --version
@@ -70,13 +77,15 @@ cbox --version
 
 ## Usage
 
+For complete command-line reference, see [CLI-REFERENCE.md](CLI-REFERENCE.md).
+
 ### Quick Help
 
 ```bash
 cbox --help               # Show help information
 cbox --version            # Display version
 cbox --verbose            # Run with debug output
-cbox --telemetry-status   # View telemetry information
+cbox --verify             # Verify installation
 ```
 
 ### Basic usage
@@ -140,7 +149,62 @@ docker build -t cbox:latest -f ~/.cache/cbox/Dockerfile ~/.cache/cbox
 docker run -it --entrypoint /bin/bash cbox:latest
 ```
 
-## Environment Variables
+## Configuration
+
+### Configuration File (.cbox.json)
+
+cbox supports an optional JSON configuration file for customizing container behavior. The configuration is loaded from (in order of precedence):
+
+1. `./.cbox.json` (project-specific)
+2. `~/.cbox.json` (user-specific)
+3. `${XDG_CONFIG_HOME}/cbox/config.json` (XDG standard location)
+
+**Example configuration:**
+
+```json
+{
+  "dockerImage": "cbox:latest",
+  "dockerBuildArgs": [
+    "HTTP_PROXY=http://proxy.example.com:8080"
+  ],
+  "volumes": [
+    "/host/data:/container/data:rw"
+  ],
+  "environment": [
+    "CUSTOM_VAR=value",
+    "DEBUG_LEVEL=info"
+  ],
+  "network": "bridge",
+  "telemetry": false,
+  "securityMode": "standard",
+  "autoUpdate": true
+}
+```
+
+**Configuration options:**
+
+| Option | Description | Default | Values |
+|--------|-------------|---------|--------|
+| `dockerImage` | Docker image to use | `cbox:latest` | Any valid image name |
+| `dockerBuildArgs` | Additional build arguments | `[]` | Array of `KEY=value` strings |
+| `volumes` | Additional volume mounts | `[]` | Array of `host:container:mode` |
+| `environment` | Additional environment variables | `[]` | Array of `KEY=value` strings |
+| `network` | Docker network mode | `bridge` | `host`, `bridge`, `none`, or custom |
+| `telemetry` | Enable telemetry (not yet implemented) | `false` | `true`, `false` |
+| `securityMode` | Security level | `standard` | `standard`, `restricted`, `paranoid` |
+| `autoUpdate` | Auto-update Docker image | `true` | `true`, `false` |
+
+**Security modes:**
+- `standard`: Default security, allows network access and SSH agent
+- `restricted`: Limited network access, SSH agent allowed
+- `paranoid`: No network access, no SSH agent, read-only volumes
+
+Copy the example configuration from `.cbox.json.example` to get started:
+```bash
+cp .cbox.json.example .cbox.json
+```
+
+### Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
@@ -210,7 +274,7 @@ cbox automatically uses your host Claude authentication:
 git pull origin main
 
 # Or re-run installation script
-curl -fsSL https://raw.githubusercontent.com/yourusername/cbox/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/bradleydwyer/cbox/main/install.sh | bash
 ```
 
 ### Updating Claude Code CLI
@@ -220,56 +284,51 @@ curl -fsSL https://raw.githubusercontent.com/yourusername/cbox/main/install.sh |
 CBOX_REBUILD=1 cbox
 ```
 
-## Telemetry
+## Telemetry (Planned Feature)
 
-cbox includes optional telemetry to help improve the tool. Telemetry is **disabled by default** and respects user privacy.
+**Note:** Telemetry is a planned feature that is not yet implemented in the current version of cbox. The telemetry-related command-line options are documented but non-functional.
 
-### What Data is Collected
+### Planned Telemetry Features
 
-When enabled, cbox collects anonymous usage data locally including:
+When implemented, cbox will include optional telemetry to help improve the tool. The planned implementation will:
+
+- Be **disabled by default** and require explicit opt-in
+- Collect only anonymous usage data locally
+- Never transmit data to external servers
+- Respect user privacy as the top priority
+
+### Planned Data Collection
+
+The telemetry system, when implemented, is designed to collect:
 
 - Session start/end times and duration
 - Command types executed (sanitized, no sensitive data)
 - Error events and performance metrics
 - Basic environment information (no PII)
 
-**Privacy guarantees:**
-- No personally identifiable information (PII) is collected
-- No command arguments or file contents are logged
-- All data stays local on your machine
-- No data is transmitted to external servers
+**Privacy guarantees (when implemented):**
+- No personally identifiable information (PII) will be collected
+- No command arguments or file contents will be logged
+- All data will stay local on your machine
+- No data will be transmitted to external servers
 
-### Managing Telemetry
+### Future Telemetry Commands
+
+The following commands are planned but not yet functional:
 
 ```bash
-# Check telemetry status
-cbox --telemetry-status
-
-# Enable telemetry (opt-in)
-cbox --telemetry-enable
-
-# Disable telemetry
-cbox --telemetry-disable
-
-# Clear all collected data
-cbox --telemetry-clear
+# These commands are documented but not yet implemented:
+cbox --telemetry-status   # Will check telemetry status
+cbox --telemetry-enable   # Will enable telemetry (opt-in)
+cbox --telemetry-disable  # Will disable telemetry
+cbox --telemetry-clear    # Will clear all collected data
 ```
 
-### Data Storage
+### Planned Data Storage Location
 
-Telemetry data is stored locally in:
+When implemented, telemetry data will be stored locally in:
 - **Config**: `~/.config/cbox/telemetry.conf`
 - **Data**: `~/.local/share/cbox/telemetry/`
-
-You can examine the collected data at any time using standard JSON tools:
-
-```bash
-# View recent sessions
-find ~/.local/share/cbox/telemetry -name "*.json" | head -3 | xargs cat | jq .
-
-# Count total sessions
-find ~/.local/share/cbox/telemetry -name "*.json" | wc -l
-```
 
 ### Cleaning up / Uninstalling
 
@@ -371,6 +430,13 @@ Try:
 - **Large directories**: May have slightly slower I/O due to volume mounting
 - **Memory usage**: Container typically uses 200-500MB RAM
 - **Network latency**: Minimal overhead for network operations
+
+## Documentation
+
+- [CLI-REFERENCE.md](CLI-REFERENCE.md) - Complete command-line reference
+- [CHANGELOG.md](CHANGELOG.md) - Version history and release notes
+- [CONTRIBUTING.md](CONTRIBUTING.md) - Contribution guidelines
+- [SECURITY_AUDIT.md](SECURITY_AUDIT.md) - Security analysis and recommendations
 
 ## License
 

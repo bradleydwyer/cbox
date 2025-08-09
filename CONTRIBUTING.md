@@ -89,7 +89,7 @@ Before you begin, ensure you have the following installed:
    cd cbox
    
    # Add upstream remote
-   git remote add upstream git@github.com:yourusername/cbox.git
+   git remote add upstream git@github.com:bradleydwyer/cbox.git
    ```
 
 2. **Create a development branch**
@@ -778,7 +778,7 @@ We use [Semantic Versioning](https://semver.org/): `MAJOR.MINOR.PATCH`
 - @username1
 - @username2
 
-**Full Changelog**: https://github.com/yourusername/cbox/compare/v1.1.0...v1.2.0
+**Full Changelog**: https://github.com/bradleydwyer/cbox/compare/v1.1.0...v1.2.0
 ```
 
 ## Getting Help

@@ -7,6 +7,11 @@ IMAGE="cbox:latest"
 CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/cbox"
 DOCKERFILE="${CACHE_DIR}/Dockerfile"
 
+# Configurable resource limits
+MEMORY_LIMIT="${CBOX_MEMORY:-2g}"
+CPU_LIMIT="${CBOX_CPUS:-2}"
+
+
 # Enable verbose mode if requested
 if [[ "${CBOX_VERBOSE:-0}" == "1" ]]; then
   set -x
@@ -30,6 +35,8 @@ Options:
 Environment Variables:
   CBOX_REBUILD=1   Force rebuild Docker image
   CBOX_VERBOSE=1   Enable verbose debug output
+  CBOX_MEMORY=4g   Set container memory limit (default: 2g)
+  CBOX_CPUS=4      Set container CPU limit (default: 2)
 
 Examples:
   cbox                        # Run in current directory
@@ -37,7 +44,7 @@ Examples:
   cbox -- chat --model opus   # Pass arguments to Claude
   cbox --shell                # Open shell in container
 
-For more information, see: https://github.com/yourusername/cbox
+For more information, see: https://github.com/bradleydwyer/cbox
 EOF
 }
 
@@ -93,6 +100,85 @@ done
 
 # Remaining arguments after -- are passed to Claude
 CLAUDE_ARGS=("$@")
+
+# --- Path Security Validation Function ---
+validate_path_security() {
+  local path="$1"
+  
+  # Check for shell metacharacters that could lead to command injection
+  if [[ "$path" == *";"* ]] || [[ "$path" == *"|"* ]] || [[ "$path" == *"&"* ]] || \
+     [[ "$path" == *">"* ]] || [[ "$path" == *"<"* ]] || [[ "$path" == *'$('* ]] || \
+     [[ "$path" == *'${'* ]] || [[ "$path" == *'`'* ]]; then
+    echo "cbox: Security error: Path contains dangerous shell characters" >&2
+    echo "  Characters like ; | & > < $ and backticks are not allowed" >&2
+    return 1
+  fi
+  
+  # Check for null bytes (common in path traversal attacks)
+  if [[ "$path" == *$'\0'* ]]; then
+    echo "cbox: Security error: Path contains null bytes" >&2
+    return 1
+  fi
+  
+  # SECURITY FIX: Validate path exists BEFORE any command substitution to prevent injection
+  local canonical_path="$path"
+  if [[ -d "$path" ]]; then
+    # Path exists, safely resolve it using -- to prevent option injection
+    if command -v realpath >/dev/null 2>&1; then
+      canonical_path="$(realpath -- "$path" 2>/dev/null)" || {
+        echo "cbox: Cannot resolve path: $path" >&2
+        return 1
+      }
+    else
+      canonical_path="$(cd -- "$path" 2>/dev/null && pwd)" || {
+        echo "cbox: Cannot access directory: $path" >&2
+        return 1
+      }
+    fi
+  else
+    # For non-existent paths, safely resolve with -- to prevent option injection
+    canonical_path="$(realpath -m -- "$path" 2>/dev/null)" || canonical_path="$path"
+  fi
+  
+  # Block access to system directories (but allow /tmp, /home, /var/tmp)
+  case "$canonical_path" in
+    /etc|/etc/*)
+      echo "cbox: Security error: Access to system directory denied: $canonical_path" >&2
+      return 1
+      ;;
+    /sys|/sys/*|/proc|/proc/*|/dev|/dev/*|/boot|/boot/*|/root|/root/*)
+      echo "cbox: Security error: Access to system directory denied: $canonical_path" >&2
+      return 1
+      ;;
+    /bin|/bin/*|/sbin|/sbin/*|/lib|/lib/*|/lib64|/lib64/*)
+      echo "cbox: Security error: Access to system directory denied: $canonical_path" >&2
+      return 1
+      ;;
+    /usr/bin|/usr/bin/*|/usr/sbin|/usr/sbin/*|/usr/lib|/usr/lib/*)
+      echo "cbox: Security error: Access to system directory denied: $canonical_path" >&2
+      return 1
+      ;;
+    /var/log|/var/log/*|/var/run|/var/run/*|/var/lock|/var/lock/*)
+      echo "cbox: Security error: Access to system directory denied: $canonical_path" >&2
+      return 1
+      ;;
+    /var/spool|/var/spool/*|/var/mail|/var/mail/*)
+      echo "cbox: Security error: Access to system directory denied: $canonical_path" >&2
+      return 1
+      ;;
+  esac
+  
+  return 0
+}
+
+# --- Path Security Validation ---
+# Validate path for security issues BEFORE Docker checks
+if [[ "$WORKDIR" != "$PWD" ]]; then
+  # User specified a custom directory - validate it
+  if ! validate_path_security "$WORKDIR"; then
+    exit 1
+  fi
+fi
 
 # --- sanity checks ---
 if ! command -v docker >/dev/null 2>&1; then
@@ -150,8 +236,9 @@ if [[ ! -d "$WORKDIR" ]]; then
   exit 1
 fi
 
-# Resolve to absolute path
-WORKDIR="$(cd "$WORKDIR" && pwd)" || {
+# Resolve to absolute path with security hardening
+# Use -- to prevent option injection attacks
+WORKDIR="$(cd -- "$WORKDIR" && pwd)" || {
   echo "cbox: Cannot access directory: $WORKDIR" >&2
   exit 1
 }
@@ -163,15 +250,21 @@ if [[ ! -f "$DOCKERFILE" ]]; then
   cat >"$DOCKERFILE" <<'EOF'
 FROM node:20-bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git openssh-client ca-certificates tini bash less curl wget && \
+    git openssh-client ca-certificates tini bash less curl wget procps && \
     rm -rf /var/lib/apt/lists/*
 RUN npm i -g @anthropic-ai/claude-code@latest
+# Install Hermit globally for all users
+RUN curl -fsSL https://github.com/cashapp/hermit/releases/latest/download/install.sh | HERMIT_USER_HOME=/opt/hermit bash && \
+    ln -s /opt/hermit/bin/hermit /usr/local/bin/hermit && \
+    echo 'export PATH="/opt/hermit/bin:$PATH"' >> /etc/bash.bashrc
 # Create an entrypoint script that sets up the user properly
 RUN echo '#!/bin/bash\n\
 if [ -n "$HOST_UID" ] && [ -n "$HOST_GID" ]; then\n\
   groupadd -g $HOST_GID host 2>/dev/null || true\n\
   useradd -u $HOST_UID -g $HOST_GID -d /home/host -s /bin/bash host 2>/dev/null || true\n\
   chown -R $HOST_UID:$HOST_GID /home/host 2>/dev/null || true\n\
+  # Initialize Hermit for the host user\n\
+  mkdir -p /home/host/bin && ln -sf /opt/hermit/bin/hermit /home/host/bin/hermit 2>/dev/null || true\n\
   exec gosu host "$@"\n\
 else\n\
   exec "$@"\n\
@@ -205,8 +298,8 @@ vols=(-v "$WORKDIR":/work
       -v "$SSH_AUTH_SOCK":/ssh-agent
       -v "$HOME/.claude":/home/host/.claude)
 
-# Also mount the main .claude.json file if it exists
-[[ -f "$HOME/.claude.json" ]] && vols+=(-v "$HOME/.claude.json":/home/host/.claude.json)
+# SECURITY FIX: Mount sensitive files as read-only to prevent container from modifying them
+[[ -f "$HOME/.claude.json" ]] && vols+=(-v "$HOME/.claude.json":/home/host/.claude.json:ro)
 [[ -f "$HOME/.gitconfig" ]] && vols+=(-v "$HOME/.gitconfig":/home/host/.gitconfig:ro)
 [[ -f "$HOME/.ssh/known_hosts" ]] && vols+=(-v "$HOME/.ssh/known_hosts":/home/host/.ssh/known_hosts:ro)
 [[ -f "$HOME/.git-credentials" ]] && vols+=(-v "$HOME/.git-credentials":/home/host/.git-credentials:ro)
@@ -224,10 +317,10 @@ else
   fi
 fi
 
-# Detect if we have a TTY
-TTY_FLAGS=""
+# SECURITY FIX: Use array for TTY flags to prevent word splitting issues
+declare -a TTY_FLAGS=()
 if [ -t 0 ] && [ -t 1 ]; then
-  TTY_FLAGS="-it"
+  TTY_FLAGS=("-it")
 fi
 
 # Show what we're doing in verbose mode
@@ -237,7 +330,21 @@ if [[ "${CBOX_VERBOSE:-0}" == "1" ]]; then
   echo "cbox: Volume mounts: ${#vols[@]} volumes" >&2
 fi
 
-exec docker run --rm $TTY_FLAGS \
+# SECURITY HARDENING: Add Docker security capabilities and constraints
+exec docker run --rm "${TTY_FLAGS[@]}" \
+  --memory "$MEMORY_LIMIT" \
+  --cpus "$CPU_LIMIT" \
+  --cap-drop=ALL \
+  --cap-add=CHOWN \
+  --cap-add=DAC_OVERRIDE \
+  --cap-add=FOWNER \
+  --cap-add=SETUID \
+  --cap-add=SETGID \
+  --security-opt=no-new-privileges \
+  --read-only \
+  --tmpfs /tmp:rw,noexec,nosuid,size=512m \
+  --tmpfs /home/host/.cache:rw,noexec,nosuid,size=512m \
+  --tmpfs /home/host/.npm:rw,noexec,nosuid,size=256m \
   -e HOME=/home/host \
   -e USER=host \
   -e TERM="${TERM:-xterm-256color}" \
