@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# cbox-update: Force update and rebuild cbox Docker image
+set -euo pipefail
+
+echo "cbox-update: Updating cbox Docker environment..."
+
+# Get cache directory
+CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/cbox"
+IMAGE="cbox:latest"
+
+# Remove cached Dockerfile to force regeneration with latest settings
+if [[ -f "$CACHE_DIR/Dockerfile" ]]; then
+    echo "  → Removing cached Dockerfile..."
+    rm -f "$CACHE_DIR/Dockerfile"
+fi
+
+# Remove existing Docker image to force complete rebuild
+if docker image inspect "$IMAGE" >/dev/null 2>&1; then
+    echo "  → Removing existing Docker image..."
+    docker rmi "$IMAGE"
+fi
+
+# Clear Docker build cache for a clean build
+echo "  → Clearing Docker build cache..."
+docker builder prune -f >/dev/null 2>&1 || true
+
+echo "  → Rebuilding cbox image with latest configuration..."
+
+# Force rebuild with environment variable
+CBOX_REBUILD=1 exec cbox "$@"
