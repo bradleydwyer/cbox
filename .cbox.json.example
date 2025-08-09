@@ -1,0 +1,41 @@
+{
+  "_comment": "Example cbox configuration file",
+  "_comment2": "Copy this file to .cbox.json and customize as needed",
+  "_comment3": "Configuration is loaded from: ./.cbox.json, ~/.cbox.json, or ${XDG_CONFIG_HOME}/cbox/config.json",
+  
+  "dockerImage": "cbox:latest",
+  "dockerBuildArgs": [
+    "HTTP_PROXY=http://proxy.example.com:8080",
+    "BUILD_ENV=production"
+  ],
+  "volumes": [
+    "/host/data:/container/data:rw",
+    "/host/cache:/container/cache:ro"
+  ],
+  "environment": [
+    "CUSTOM_VAR=value",
+    "DEBUG_LEVEL=info"
+  ],
+  "network": "host",
+  "telemetry": false,
+  "securityMode": "standard",
+  "autoUpdate": true,
+  
+  "_security_modes": {
+    "standard": "Default security, allows network access and SSH agent",
+    "restricted": "Limited network access, SSH agent allowed", 
+    "paranoid": "No network access, no SSH agent, read-only volumes"
+  },
+  
+  "_network_options": [
+    "host",
+    "bridge", 
+    "none",
+    "custom-network-name"
+  ],
+  
+  "_volume_format": "host_path:container_path:mode",
+  "_volume_modes": ["rw", "ro", "z", "Z"],
+  
+  "_environment_format": "VARIABLE_NAME=value"
+}

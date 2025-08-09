@@ -94,59 +94,6 @@ done
 # Remaining arguments after -- are passed to Claude
 CLAUDE_ARGS=("$@")
 
-# --- Path Security Validation ---
-# Validate path for security issues BEFORE Docker checks
-if [[ "$WORKDIR" != "$PWD" ]]; then
-  # User specified a custom directory - validate it
-  
-  # Check for shell metacharacters that could lead to command injection
-  if [[ "$WORKDIR" == *";"* ]] || [[ "$WORKDIR" == *"|"* ]] || [[ "$WORKDIR" == *"&"* ]] || \
-     [[ "$WORKDIR" == *">"* ]] || [[ "$WORKDIR" == *"<"* ]] || [[ "$WORKDIR" == *'$('* ]] || \
-     [[ "$WORKDIR" == *'${'* ]] || [[ "$WORKDIR" == *'`'* ]]; then
-    echo "cbox: Security error: Path contains dangerous shell characters" >&2
-    echo "  Characters like ; | & > < $ and backticks are not allowed" >&2
-    exit 1
-  fi
-  
-  
-  # Get canonical path if directory exists
-  if [[ -d "$WORKDIR" ]]; then
-    if command -v realpath >/dev/null 2>&1; then
-      CANONICAL_PATH="$(realpath "$WORKDIR" 2>/dev/null)" || CANONICAL_PATH="$WORKDIR"
-    else
-      CANONICAL_PATH="$(cd "$WORKDIR" 2>/dev/null && pwd)" || CANONICAL_PATH="$WORKDIR"
-    fi
-    
-    # Block access to system directories (but allow /tmp, /home, /var/tmp)
-    case "$CANONICAL_PATH" in
-      /etc|/etc/*)
-        echo "cbox: Security error: Access to system directory denied: $CANONICAL_PATH" >&2
-        exit 1
-        ;;
-      /sys|/sys/*|/proc|/proc/*|/dev|/dev/*|/boot|/boot/*|/root|/root/*)
-        echo "cbox: Security error: Access to system directory denied: $CANONICAL_PATH" >&2
-        exit 1
-        ;;
-      /bin|/bin/*|/sbin|/sbin/*|/lib|/lib/*|/lib64|/lib64/*)
-        echo "cbox: Security error: Access to system directory denied: $CANONICAL_PATH" >&2
-        exit 1
-        ;;
-      /usr/bin|/usr/bin/*|/usr/sbin|/usr/sbin/*|/usr/lib|/usr/lib/*)
-        echo "cbox: Security error: Access to system directory denied: $CANONICAL_PATH" >&2
-        exit 1
-        ;;
-      /var/log|/var/log/*|/var/run|/var/run/*|/var/lock|/var/lock/*)
-        echo "cbox: Security error: Access to system directory denied: $CANONICAL_PATH" >&2
-        exit 1
-        ;;
-      /var/spool|/var/spool/*|/var/mail|/var/mail/*)
-        echo "cbox: Security error: Access to system directory denied: $CANONICAL_PATH" >&2
-        exit 1
-        ;;
-    esac
-  fi
-fi
-
 # --- sanity checks ---
 if ! command -v docker >/dev/null 2>&1; then
   echo "cbox: Docker is required but not found in PATH." >&2
@@ -216,21 +163,15 @@ if [[ ! -f "$DOCKERFILE" ]]; then
   cat >"$DOCKERFILE" <<'EOF'
 FROM node:20-bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git openssh-client ca-certificates tini bash less curl wget procps && \
+    git openssh-client ca-certificates tini bash less curl wget && \
     rm -rf /var/lib/apt/lists/*
 RUN npm i -g @anthropic-ai/claude-code@latest
-# Install Hermit globally for all users
-RUN curl -fsSL https://github.com/cashapp/hermit/releases/latest/download/install.sh | HERMIT_USER_HOME=/opt/hermit bash && \
-    ln -s /opt/hermit/bin/hermit /usr/local/bin/hermit && \
-    echo 'export PATH="/opt/hermit/bin:$PATH"' >> /etc/bash.bashrc
 # Create an entrypoint script that sets up the user properly
 RUN echo '#!/bin/bash\n\
 if [ -n "$HOST_UID" ] && [ -n "$HOST_GID" ]; then\n\
   groupadd -g $HOST_GID host 2>/dev/null || true\n\
   useradd -u $HOST_UID -g $HOST_GID -d /home/host -s /bin/bash host 2>/dev/null || true\n\
   chown -R $HOST_UID:$HOST_GID /home/host 2>/dev/null || true\n\
-  # Initialize Hermit for the host user\n\
-  mkdir -p /home/host/bin && ln -sf /opt/hermit/bin/hermit /home/host/bin/hermit 2>/dev/null || true\n\
   exec gosu host "$@"\n\
 else\n\
   exec "$@"\n\
@@ -297,8 +238,6 @@ if [[ "${CBOX_VERBOSE:-0}" == "1" ]]; then
 fi
 
 exec docker run --rm $TTY_FLAGS \
-  --memory 2g \
-  --cpus 2 \
   -e HOME=/home/host \
   -e USER=host \
   -e TERM="${TERM:-xterm-256color}" \

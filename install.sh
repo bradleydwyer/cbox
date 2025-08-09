@@ -4,7 +4,7 @@ set -euo pipefail
 
 VERSION="1.1.0"
 INSTALL_DIR="/usr/local/bin"
-REPO_URL="https://raw.githubusercontent.com/yourusername/cbox/main"
+REPO_URL="https://raw.githubusercontent.com/bradleydwyer/cbox/main"
 
 # Colors for output
 RED='\033[0;31m'
@@ -95,42 +95,145 @@ check_prerequisites() {
   fi
 }
 
-# Download cbox script
-download_cbox() {
-  local temp_file="/tmp/cbox.$$"
+# Verify SHA256 checksum
+verify_checksum() {
+  local file="$1"
+  local checksums_file="$2"
+  local filename="$(basename "$file")"
+  
+  # Extract expected checksum for this file
+  local expected_checksum
+  expected_checksum=$(grep "${filename}$" "$checksums_file" | awk '{print $1}')
+  
+  if [[ -z "$expected_checksum" ]]; then
+    error "No checksum found for $filename in checksums file"
+    return 1
+  fi
+  
+  # Calculate actual checksum
+  local actual_checksum
+  if command -v sha256sum &> /dev/null; then
+    actual_checksum=$(sha256sum "$file" | awk '{print $1}')
+  elif command -v shasum &> /dev/null; then
+    actual_checksum=$(shasum -a 256 "$file" | awk '{print $1}')
+  else
+    error "Neither sha256sum nor shasum available for checksum verification"
+    exit 1
+  fi
+  
+  # Compare checksums
+  if [[ "$expected_checksum" != "$actual_checksum" ]]; then
+    error "Checksum verification failed for $filename"
+    error "  Expected: $expected_checksum"
+    error "  Got:      $actual_checksum"
+    error "This could indicate a man-in-the-middle attack or corrupted download."
+    return 1
+  fi
+  
+  info "✓ Checksum verified for $filename"
+  return 0
+}
+
+# Download files with integrity checks
+download_with_verification() {
+  local temp_dir="/tmp/cbox-install.$$"
+  mkdir -p "$temp_dir"
+  
+  # Trap to cleanup on exit
+  trap "rm -rf '$temp_dir'" EXIT
+  
+  info "Downloading checksums file..."
+  
+  # Download SHA256SUMS file
+  if command -v curl &> /dev/null; then
+    curl -fsSL "$REPO_URL/SHA256SUMS" -o "$temp_dir/SHA256SUMS" || {
+      error "Failed to download checksums file"
+      error "Installation aborted for security reasons."
+      exit 1
+    }
+  elif command -v wget &> /dev/null; then
+    wget -qO "$temp_dir/SHA256SUMS" "$REPO_URL/SHA256SUMS" || {
+      error "Failed to download checksums file"
+      error "Installation aborted for security reasons."
+      exit 1
+    }
+  fi
+  
+  # Verify checksums file is not empty
+  if [[ ! -s "$temp_dir/SHA256SUMS" ]]; then
+    error "Downloaded checksums file is empty"
+    error "Installation aborted for security reasons."
+    exit 1
+  fi
   
   info "Downloading cbox script..."
   
+  # Download cbox script
   if command -v curl &> /dev/null; then
-    curl -fsSL "$REPO_URL/cbox" -o "$temp_file" || {
+    curl -fsSL "$REPO_URL/cbox" -o "$temp_dir/cbox" || {
       error "Failed to download cbox script"
       exit 1
     }
   elif command -v wget &> /dev/null; then
-    wget -qO "$temp_file" "$REPO_URL/cbox" || {
+    wget -qO "$temp_dir/cbox" "$REPO_URL/cbox" || {
       error "Failed to download cbox script"
       exit 1
     }
   fi
   
-  # Verify download
-  if [[ ! -s "$temp_file" ]]; then
-    error "Downloaded file is empty"
+  # Verify cbox download
+  if [[ ! -s "$temp_dir/cbox" ]]; then
+    error "Downloaded cbox file is empty"
     exit 1
   fi
   
-  # Make executable
-  chmod +x "$temp_file"
+  # Verify checksum for cbox
+  if ! verify_checksum "$temp_dir/cbox" "$temp_dir/SHA256SUMS"; then
+    error "Security verification failed. Installation aborted."
+    exit 1
+  fi
   
-  echo "$temp_file"
+  info "Downloading cbox-update script..."
+  
+  # Download cbox-update script
+  if command -v curl &> /dev/null; then
+    curl -fsSL "$REPO_URL/cbox-update" -o "$temp_dir/cbox-update" || {
+      error "Failed to download cbox-update script"
+      exit 1
+    }
+  elif command -v wget &> /dev/null; then
+    wget -qO "$temp_dir/cbox-update" "$REPO_URL/cbox-update" || {
+      error "Failed to download cbox-update script"
+      exit 1
+    }
+  fi
+  
+  # Verify cbox-update download
+  if [[ ! -s "$temp_dir/cbox-update" ]]; then
+    error "Downloaded cbox-update file is empty"
+    exit 1
+  fi
+  
+  # Verify checksum for cbox-update
+  if ! verify_checksum "$temp_dir/cbox-update" "$temp_dir/SHA256SUMS"; then
+    error "Security verification failed. Installation aborted."
+    exit 1
+  fi
+  
+  # Make scripts executable
+  chmod +x "$temp_dir/cbox"
+  chmod +x "$temp_dir/cbox-update"
+  
+  info "✓ All files downloaded and verified successfully"
+  
+  echo "$temp_dir"
 }
 
-# Install cbox
-install_cbox() {
-  local script_path="$1"
-  local target_path="$INSTALL_DIR/cbox"
+# Install cbox and cbox-update
+install_scripts() {
+  local temp_dir="$1"
   
-  info "Installing cbox to $target_path..."
+  info "Installing scripts to $INSTALL_DIR..."
   
   # Check if target directory exists
   if [[ ! -d "$INSTALL_DIR" ]]; then
@@ -138,18 +241,23 @@ install_cbox() {
     exit 1
   fi
   
-  # Install with sudo if needed
+  # Install both scripts with sudo if needed
   if [[ -w "$INSTALL_DIR" ]]; then
-    cp "$script_path" "$target_path"
+    cp "$temp_dir/cbox" "$INSTALL_DIR/cbox"
+    cp "$temp_dir/cbox-update" "$INSTALL_DIR/cbox-update"
+    chmod 755 "$INSTALL_DIR/cbox"
+    chmod 755 "$INSTALL_DIR/cbox-update"
   else
     info "Requesting sudo access to install to $INSTALL_DIR"
-    sudo cp "$script_path" "$target_path"
-    sudo chmod 755 "$target_path"
+    sudo cp "$temp_dir/cbox" "$INSTALL_DIR/cbox"
+    sudo cp "$temp_dir/cbox-update" "$INSTALL_DIR/cbox-update"
+    sudo chmod 755 "$INSTALL_DIR/cbox"
+    sudo chmod 755 "$INSTALL_DIR/cbox-update"
   fi
   
   # Verify installation
-  if [[ -x "$target_path" ]]; then
-    info "Successfully installed cbox"
+  if [[ -x "$INSTALL_DIR/cbox" ]] && [[ -x "$INSTALL_DIR/cbox-update" ]]; then
+    info "✓ Successfully installed cbox and cbox-update"
   else
     error "Installation failed"
     exit 1
@@ -226,14 +334,13 @@ main() {
   detect_os
   check_prerequisites
   
-  # Download script
-  temp_script=$(download_cbox)
+  # Download and verify all files
+  temp_dir=$(download_with_verification)
   
-  # Install
-  install_cbox "$temp_script"
+  # Install scripts
+  install_scripts "$temp_dir"
   
-  # Cleanup temp file
-  rm -f "$temp_script"
+  # Cleanup is handled by trap in download_with_verification
   
   # Setup shell
   setup_shell

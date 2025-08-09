@@ -73,9 +73,10 @@ cbox --version
 ### Quick Help
 
 ```bash
-cbox --help        # Show help information
-cbox --version     # Display version
-cbox --verbose     # Run with debug output
+cbox --help               # Show help information
+cbox --version            # Display version
+cbox --verbose            # Run with debug output
+cbox --telemetry-status   # View telemetry information
 ```
 
 ### Basic usage
@@ -146,6 +147,8 @@ docker run -it --entrypoint /bin/bash cbox:latest
 | `CBOX_REBUILD` | Force rebuild of Docker image (set to 1) | 0 |
 | `CBOX_VERBOSE` | Enable verbose debug output (set to 1) | 0 |
 | `XDG_CACHE_HOME` | Override cache directory location | ~/.cache |
+| `XDG_CONFIG_HOME` | Override config directory location | ~/.config |
+| `XDG_DATA_HOME` | Override data directory location | ~/.local/share |
 | `TERM` | Terminal type passed to container | xterm-256color |
 | `SSH_AUTH_SOCK` | SSH agent socket path | (required) |
 
@@ -217,6 +220,57 @@ curl -fsSL https://raw.githubusercontent.com/yourusername/cbox/main/install.sh |
 CBOX_REBUILD=1 cbox
 ```
 
+## Telemetry
+
+cbox includes optional telemetry to help improve the tool. Telemetry is **disabled by default** and respects user privacy.
+
+### What Data is Collected
+
+When enabled, cbox collects anonymous usage data locally including:
+
+- Session start/end times and duration
+- Command types executed (sanitized, no sensitive data)
+- Error events and performance metrics
+- Basic environment information (no PII)
+
+**Privacy guarantees:**
+- No personally identifiable information (PII) is collected
+- No command arguments or file contents are logged
+- All data stays local on your machine
+- No data is transmitted to external servers
+
+### Managing Telemetry
+
+```bash
+# Check telemetry status
+cbox --telemetry-status
+
+# Enable telemetry (opt-in)
+cbox --telemetry-enable
+
+# Disable telemetry
+cbox --telemetry-disable
+
+# Clear all collected data
+cbox --telemetry-clear
+```
+
+### Data Storage
+
+Telemetry data is stored locally in:
+- **Config**: `~/.config/cbox/telemetry.conf`
+- **Data**: `~/.local/share/cbox/telemetry/`
+
+You can examine the collected data at any time using standard JSON tools:
+
+```bash
+# View recent sessions
+find ~/.local/share/cbox/telemetry -name "*.json" | head -3 | xargs cat | jq .
+
+# Count total sessions
+find ~/.local/share/cbox/telemetry -name "*.json" | wc -l
+```
+
 ### Cleaning up / Uninstalling
 
 ```bash
@@ -228,6 +282,9 @@ docker rmi cbox:latest
 
 # Clean cache directory
 rm -rf ~/.cache/cbox
+
+# Clean telemetry data (optional)
+rm -rf ~/.local/share/cbox ~/.config/cbox
 
 # Remove any stopped containers
 docker container prune
