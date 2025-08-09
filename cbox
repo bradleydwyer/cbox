@@ -26,11 +26,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git openssh-client ca-certificates tini bash less && \
     rm -rf /var/lib/apt/lists/*
 RUN npm i -g @anthropic-ai/claude-code@latest
-# Create home directory and .ssh that can be used by any UID
-RUN mkdir -p /home/host/.ssh && chmod -R 777 /home/host
+# Create an entrypoint script that sets up the user properly
+RUN echo '#!/bin/bash\n\
+if [ -n "$HOST_UID" ] && [ -n "$HOST_GID" ]; then\n\
+  groupadd -g $HOST_GID host 2>/dev/null || true\n\
+  useradd -u $HOST_UID -g $HOST_GID -d /home/host -s /bin/bash host 2>/dev/null || true\n\
+  chown -R $HOST_UID:$HOST_GID /home/host 2>/dev/null || true\n\
+  exec gosu host "$@"\n\
+else\n\
+  exec "$@"\n\
+fi' > /entrypoint.sh && chmod +x /entrypoint.sh
+# Install gosu for proper user switching
+RUN apt-get update && apt-get install -y gosu && rm -rf /var/lib/apt/lists/*
+# Create home directory
+RUN mkdir -p /home/host/.ssh && chmod 755 /home/host
 ENV SHELL=/bin/bash
 WORKDIR /work
-ENTRYPOINT ["/usr/bin/tini","--"]
+ENTRYPOINT ["/usr/bin/tini", "--", "/entrypoint.sh"]
 EOF
 fi
 
@@ -66,11 +78,19 @@ if [[ $# -gt 1 && "$2" == "--" ]]; then
   CLAUDE_ARGS+=("$@")
 fi
 
-exec docker run --rm -it \
-  -u "$(id -u)":"$(id -g)" \
+# Detect if we have a TTY
+TTY_FLAGS=""
+if [ -t 0 ] && [ -t 1 ]; then
+  TTY_FLAGS="-it"
+fi
+
+exec docker run --rm $TTY_FLAGS \
   -e HOME=/home/host \
+  -e USER=host \
   -e TERM="${TERM:-xterm-256color}" \
   -e SSH_AUTH_SOCK=/ssh-agent \
+  -e HOST_UID="$(id -u)" \
+  -e HOST_GID="$(id -g)" \
   -w /work \
   "${vols[@]}" \
-  "$IMAGE" bash -lc "claude ${CLAUDE_ARGS[*]}"
+  "$IMAGE" claude "${CLAUDE_ARGS[@]}"
