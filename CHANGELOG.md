@@ -7,14 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.1] - 2025-01-09
+
 ### Added
-- Comprehensive CLI reference documentation
-- Status badges in README
-- Configuration file documentation in README
+- Complete shared resources documentation for full transparency
+  - All 7 persistent volume mounts documented with security warnings
+  - All 6 tmpfs RAM mounts documented (1.4 GB total memory usage)
+  - All environment variables and Docker capabilities documented
+- Git pre-commit hooks for secret scanning (Gitleaks + TruffleHog)
+- Hermit package manager for development tool management
+- Prominent experimental/vibe-coded warning in README
+- "Currently Implemented vs Planned Features" section for transparency
+- Comprehensive security documentation (SECURITY.md)
+- Secret scanning setup guide (SECRET_SCANNING.md)
+- Critical security warnings for sensitive mounts (Claude API token)
+
+### Changed
+- Consolidated three security audit reports into single SECURITY.md
+- Enhanced security warnings with clear visual indicators (🔴 ⚠️)
+- Improved documentation structure for better clarity
 
 ### Fixed
-- GitHub URL placeholders updated to correct repository
-- Telemetry documentation clarified (feature not yet implemented)
+- Removed false documentation for unimplemented features (telemetry, config parsing)
+- Fixed placeholder URLs in help text
+- Removed outdated reference to COMMIT_MESSAGE.md
+- Corrected Hermit configuration syntax errors
+
+### Removed
+- Telemetry documentation (feature never implemented)
+- Configuration file parsing documentation (code doesn't parse .cbox.json)
+- Temporary test scripts and backup files
+- Redundant security audit reports
 
 ## [1.1.0] - 2025-01-09
 

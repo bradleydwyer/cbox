@@ -1,6 +1,6 @@
 # cbox CLI Reference
 
-Complete command-line interface reference for cbox v1.1.0
+Complete command-line interface reference for cbox v1.1.1
 
 ## Synopsis
 
@@ -28,7 +28,7 @@ Display version information and exit.
 
 ```bash
 cbox --version
-# Output: cbox version 1.1.0
+# Output: cbox version 1.1.1
 ```
 
 #### `--verbose`
@@ -53,7 +53,7 @@ Verify the installation and exit. Checks for Docker, SSH agent, and Claude authe
 ```bash
 cbox --verify
 # Output:
-# ✓ cbox v1.1.0 installed successfully
+# ✓ cbox v1.1.1 installed successfully
 # ✓ Docker is available and running
 # ✓ SSH agent is running
 # ✓ Claude authentication found
