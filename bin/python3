@@ -1,0 +1,3 @@
+#!/bin/bash
+# Hermit-managed Python3 v3.12.8
+exec "$(dirname "$0")/.hermit/python3/bin/python3" "$@"

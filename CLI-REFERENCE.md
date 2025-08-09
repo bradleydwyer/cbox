@@ -59,41 +59,6 @@ cbox --verify
 # ✓ Claude authentication found
 ```
 
-### Telemetry Options (Not Yet Implemented)
-
-**Note:** These options are documented but not yet functional. Telemetry features are planned for a future release.
-
-#### `--telemetry-status`
-Check telemetry status (planned feature).
-
-```bash
-cbox --telemetry-status
-# Currently non-functional
-```
-
-#### `--telemetry-enable`
-Enable telemetry collection (planned feature).
-
-```bash
-cbox --telemetry-enable
-# Currently non-functional
-```
-
-#### `--telemetry-disable`
-Disable telemetry collection (planned feature).
-
-```bash
-cbox --telemetry-disable
-# Currently non-functional
-```
-
-#### `--telemetry-clear`
-Clear all telemetry data (planned feature).
-
-```bash
-cbox --telemetry-clear
-# Currently non-functional
-```
 
 ## Arguments
 

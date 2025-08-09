@@ -29,7 +29,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Comprehensive documentation improvements:
   - CONTRIBUTING.md with detailed contributor guidelines
   - SECURITY_AUDIT.md with security analysis
-  - COMMIT_MESSAGE.md with commit conventions
   - Installation and verification scripts
 - Example configuration file (.cbox.json.example)
 - Better error messages and validation

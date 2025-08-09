@@ -1,0 +1,47 @@
+# Pre-commit hooks for secret scanning
+# Install with: ./bin/pre-commit install
+# Manual run: ./bin/pre-commit run --all-files
+# 
+# This configuration uses Hermit-managed tools in bin/ directory
+# Activate Hermit environment with: source bin/activate-hermit
+
+repos:
+  # Gitleaks - Fast secret detection (Hermit-managed)
+  - repo: local
+    hooks:
+      - id: gitleaks
+        name: Detect hardcoded secrets (Hermit-managed Gitleaks v8.18.1)
+        description: Detect hardcoded secrets using Hermit-managed Gitleaks
+        entry: ./bin/gitleaks protect --verbose --redact --staged
+        language: system
+        pass_filenames: false
+
+  # TruffleHog - Comprehensive secret scanning (Hermit-managed)
+  # Note: TruffleHog v2.2.1 has compatibility issues with pre-commit
+  # Run manually with: ./bin/trufflehog --regex --entropy=False --json --repo_path .
+  # - repo: local
+  #   hooks:
+  #     - id: trufflehog
+  #       name: TruffleHog secret scan (Hermit-managed TruffleHog v2.2.1)
+  #       description: Scan for verified secrets using Hermit-managed TruffleHog
+  #       entry: ./bin/trufflehog --regex --entropy=False --json --repo_path .
+  #       language: system
+  #       pass_filenames: false
+  #       always_run: true
+  #       stages: [pre-commit]
+
+# Additional standard hooks (optional but recommended)
+# Uncomment and install if needed: pip install pre-commit-hooks
+# - repo: https://github.com/pre-commit/pre-commit-hooks
+#   rev: v4.5.0
+#   hooks:
+#     - id: trailing-whitespace
+#       exclude: '.*\.(md|markdown)$'
+#     - id: end-of-file-fixer
+#       exclude: '.*\.(md|markdown)$'
+#     - id: check-yaml
+#     - id: check-added-large-files
+#       args: ['--maxkb=5000']
+#     - id: check-case-conflict
+#     - id: check-merge-conflict
+#     - id: detect-private-key

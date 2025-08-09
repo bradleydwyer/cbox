@@ -45,7 +45,7 @@ Examples:
   CBOX_MEMORY=4g cbox         # Run with 4GB memory limit
   CBOX_CPUS=0.5 cbox          # Run with 0.5 CPU limit
 
-For more information, see: https://github.com/yourusername/cbox
+For more information, see: https://github.com/bradleydwyer/cbox
 EOF
 }
 
@@ -275,7 +275,7 @@ if [[ ! -f "$DOCKERFILE" ]]; then
   cat >"$DOCKERFILE" <<'EOF'
 FROM node:20-bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git openssh-client ca-certificates tini bash less curl wget procps && \
+    git openssh-client ca-certificates tini bash less curl wget procps build-essential && \
     rm -rf /var/lib/apt/lists/*
 RUN npm i -g @anthropic-ai/claude-code@latest
 # Install Hermit globally for all users

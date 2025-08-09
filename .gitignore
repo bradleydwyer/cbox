@@ -13,3 +13,10 @@
 *.swp
 *.swo
 *~
+
+# Hermit package cache and downloads
+bin/.hermit/
+
+# Utility scripts (can be regenerated)
+fix-hermit.sh
+setup-hermit.sh

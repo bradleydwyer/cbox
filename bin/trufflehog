@@ -1,0 +1,3 @@
+#!/bin/bash
+# Hermit-managed TruffleHog v2.2.1 (via pip)
+exec "$(dirname "$0")/.hermit/python3/bin/trufflehog" "$@"

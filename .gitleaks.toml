@@ -1,0 +1,62 @@
+# Gitleaks configuration for cbox project
+# Documentation: https://github.com/gitleaks/gitleaks
+
+[extend]
+# Use the default gitleaks config as base
+useDefault = true
+
+[allowlist]
+# Define files, paths, and commits to ignore
+paths = [
+    '''\.gitleaks\.toml$''',
+    '''(^|/)vendor/''',
+    '''(^|/)node_modules/''',
+    '''bin/\.hermit/''',  # Exclude Hermit packages and dependencies
+    '''\.min\.js$''',
+    '''\.lock$''',
+    '''\.svg$''',
+    '''\.png$''',
+    '''\.jpg$''',
+    '''\.jpeg$''',
+    '''\.gif$''',
+    '''\.pdf$''',
+    '''\.zip$''',
+    '''\.tar\.gz$''',
+]
+
+# Ignore specific commits if needed (example)
+# commits = ["commit-sha-to-ignore"]
+
+# Allow specific regexes that might be false positives
+regexes = [
+    '''sha256:[a-f0-9]{64}''',  # Docker image SHAs
+    '''INSTALL_SH_CHECKSUM="[a-f0-9]{64}"''',  # Installation checksums
+]
+
+[[rules]]
+# Custom rule for detecting private keys with higher confidence
+id = "private-key-enhanced"
+description = "Enhanced private key detection"
+regex = '''(?i)(-----BEGIN\s+(RSA|DSA|EC|OPENSSH|PGP)\s+PRIVATE\s+KEY-----)'''
+tags = ["key", "private"]
+secretGroup = 1
+
+[[rules]]
+# Custom rule for API tokens that might be missed
+id = "generic-api-token"
+description = "Generic API token detection"
+regex = '''(?i)(api[_\-\s]?token[\s]*[=:]\s*["']?)([a-zA-Z0-9]{32,})["']?'''
+tags = ["token", "api"]
+secretGroup = 2
+
+[[rules]]
+# Rule for environment variable assignments with secrets
+id = "env-var-secret"
+description = "Environment variable with potential secret"
+regex = '''(?i)(password|passwd|pwd|secret|token|api_key|apikey|auth)[\s]*=[\s]*["']([^"']+)["']'''
+tags = ["env", "secret"]
+secretGroup = 2
+
+# Note: Entropy-based detection is now handled by the default rules
+# Custom entropy rules can be added as separate [[rules]] entries if needed
+# The old [rules.entropy] syntax is deprecated in newer Gitleaks versions
