@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+# cbox: run Claude Code in a Docker sandbox with open network + SSH agent
+set -euo pipefail
+
+IMAGE="cbox:latest"
+CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/cbox"
+DOCKERFILE="${CACHE_DIR}/Dockerfile"
+WORKDIR="${1:-$PWD}"
+
+# --- sanity checks ---
+if ! command -v docker >/dev/null 2>&1; then
+  echo "cbox: Docker is required." >&2; exit 1
+fi
+if [[ -z "${SSH_AUTH_SOCK:-}" || ! -S "${SSH_AUTH_SOCK:-/dev/null}" ]]; then
+  echo "cbox: SSH agent not detected. Start one (e.g. 'eval \$(ssh-agent -s); ssh-add -l')." >&2
+  exit 1
+fi
+
+mkdir -p "$CACHE_DIR"
+
+# --- minimal image with Claude Code CLI ---
+if [[ ! -f "$DOCKERFILE" ]]; then
+  cat >"$DOCKERFILE" <<'EOF'
+FROM node:20-bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git openssh-client ca-certificates tini bash less && \
+    rm -rf /var/lib/apt/lists/*
+RUN npm i -g @anthropic-ai/claude-code@latest
+# Create home directory and .ssh that can be used by any UID
+RUN mkdir -p /home/host/.ssh && chmod -R 777 /home/host
+ENV SHELL=/bin/bash
+WORKDIR /work
+ENTRYPOINT ["/usr/bin/tini","--"]
+EOF
+fi
+
+# Build image if missing or CBOX_REBUILD=1
+if ! docker image inspect "$IMAGE" >/dev/null 2>&1 || [[ "${CBOX_REBUILD:-0}" == "1" ]]; then
+  DOCKER_BUILDKIT=1 docker build -t "$IMAGE" -f "$DOCKERFILE" "$CACHE_DIR"
+fi
+
+# Ensure .claude directory exists
+mkdir -p "$HOME/.claude"
+
+# Check if .claude.json exists (contains auth token)
+if [[ ! -f "$HOME/.claude.json" ]]; then
+  echo "Warning: No Claude authentication found at ~/.claude.json" >&2
+  echo "You'll need to log in when Claude starts." >&2
+fi
+
+# Volume mounts (only if sources exist)
+vols=(-v "$WORKDIR":/work
+      -v "$SSH_AUTH_SOCK":/ssh-agent
+      -v "$HOME/.claude":/home/host/.claude)
+
+# Also mount the main .claude.json file if it exists
+[[ -f "$HOME/.claude.json" ]] && vols+=(-v "$HOME/.claude.json":/home/host/.claude.json)
+[[ -f "$HOME/.gitconfig" ]] && vols+=(-v "$HOME/.gitconfig":/home/host/.gitconfig:ro)
+[[ -f "$HOME/.ssh/known_hosts" ]] && vols+=(-v "$HOME/.ssh/known_hosts":/home/host/.ssh/known_hosts:ro)
+[[ -f "$HOME/.git-credentials" ]] && vols+=(-v "$HOME/.git-credentials":/home/host/.git-credentials:ro)
+
+# Default claude command; allow extra args after the path (cbox [path] [-- extra])
+CLAUDE_ARGS=(--dangerously-skip-permissions)
+if [[ $# -gt 1 && "$2" == "--" ]]; then
+  shift 2
+  CLAUDE_ARGS+=("$@")
+fi
+
+exec docker run --rm -it \
+  -u "$(id -u)":"$(id -g)" \
+  -e HOME=/home/host \
+  -e TERM="${TERM:-xterm-256color}" \
+  -e SSH_AUTH_SOCK=/ssh-agent \
+  -w /work \
+  "${vols[@]}" \
+  "$IMAGE" bash -lc "claude ${CLAUDE_ARGS[*]}"
