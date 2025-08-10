@@ -13,8 +13,8 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 # Helper functions
-info() { echo -e "${GREEN}[INFO]${NC} $1"; }
-warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+info() { echo -e "${GREEN}[INFO]${NC} $1" >&2; }
+warn() { echo -e "${YELLOW}[WARN]${NC} $1" >&2; }
 error() { echo -e "${RED}[ERROR]${NC} $1" >&2; }
 
 # Check if running as root
@@ -249,8 +249,14 @@ install_scripts() {
     chmod 755 "$INSTALL_DIR/cbox-update"
   else
     info "Requesting sudo access to install to $INSTALL_DIR"
-    sudo cp "$temp_dir/cbox" "$INSTALL_DIR/cbox"
-    sudo cp "$temp_dir/cbox-update" "$INSTALL_DIR/cbox-update"
+    sudo cp "$temp_dir/cbox" "$INSTALL_DIR/cbox" || {
+      error "Failed to copy cbox to $INSTALL_DIR"
+      exit 1
+    }
+    sudo cp "$temp_dir/cbox-update" "$INSTALL_DIR/cbox-update" || {
+      error "Failed to copy cbox-update to $INSTALL_DIR"
+      exit 1
+    }
     sudo chmod 755 "$INSTALL_DIR/cbox"
     sudo chmod 755 "$INSTALL_DIR/cbox-update"
   fi
