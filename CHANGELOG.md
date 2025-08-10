@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.3] - 2025-08-10
+
+### Fixed
+- Install script checksum verification failures after version updates
+- Updated SHA256SUMS file with correct checksums for all release files
+
 ## [1.1.2] - 2025-08-10
 
 ### Fixed
@@ -112,7 +118,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for multiple concurrent instances
 - Easy cleanup and uninstallation
 
-[Unreleased]: https://github.com/bradleydwyer/cbox/compare/v1.1.2...HEAD
+[Unreleased]: https://github.com/bradleydwyer/cbox/compare/v1.1.3...HEAD
+[1.1.3]: https://github.com/bradleydwyer/cbox/compare/v1.1.2...v1.1.3
 [1.1.2]: https://github.com/bradleydwyer/cbox/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/bradleydwyer/cbox/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/bradleydwyer/cbox/compare/v1.0.0...v1.1.0
