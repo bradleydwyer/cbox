@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# cbox installation script
+# cbox installation script - updated for CDN cache bust
 set -euo pipefail
 
 VERSION="1.1.3"
