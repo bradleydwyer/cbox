@@ -281,11 +281,6 @@ RUN npm i -g @anthropic-ai/claude-code@latest
 # Install line counting utilities
 RUN apt-get update && apt-get install -y --no-install-recommends cloc && \
     rm -rf /var/lib/apt/lists/*
-RUN curl -LO https://github.com/XAMPPRocky/tokei/releases/latest/download/tokei-x86_64-unknown-linux-gnu.tar.gz && \
-    tar -xzf tokei-x86_64-unknown-linux-gnu.tar.gz && \
-    mv tokei /usr/local/bin/ && \
-    chmod +x /usr/local/bin/tokei && \
-    rm tokei-x86_64-unknown-linux-gnu.tar.gz
 RUN curl -LO https://github.com/boyter/scc/releases/latest/download/scc_Linux_x86_64.tar.gz && \
     tar -xzf scc_Linux_x86_64.tar.gz && \
     mv scc /usr/local/bin/ && \
