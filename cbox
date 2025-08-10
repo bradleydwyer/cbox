@@ -8,7 +8,7 @@ CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/cbox"
 DOCKERFILE="${CACHE_DIR}/Dockerfile"
 
 # Configurable resource limits
-MEMORY_LIMIT="${CBOX_MEMORY:-2g}"
+MEMORY_LIMIT="${CBOX_MEMORY:-4g}"
 CPU_LIMIT="${CBOX_CPUS:-2}"
 
 # Enable verbose mode if requested
@@ -34,7 +34,7 @@ Options:
 Environment Variables:
   CBOX_REBUILD=1   Force rebuild Docker image
   CBOX_VERBOSE=1   Enable verbose debug output
-  CBOX_MEMORY=4g   Set container memory limit (default: 2g)
+  CBOX_MEMORY=4g   Set container memory limit (default: 4g)
   CBOX_CPUS=4      Set container CPU limit (default: 2)
 
 Examples:
