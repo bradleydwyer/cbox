@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.2] - 2025-08-10
+
+### Fixed
+- Rust compilation issues with persistent Cargo cache
+- Improved Rust development environment stability
+
+### Added
+- Rust to cbox developer tooling with enhanced caching support
+
 ## [1.1.1] - 2025-01-09
 
 ### Added
@@ -103,6 +112,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for multiple concurrent instances
 - Easy cleanup and uninstallation
 
-[Unreleased]: https://github.com/bradleydwyer/cbox/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/bradleydwyer/cbox/compare/v1.1.2...HEAD
+[1.1.2]: https://github.com/bradleydwyer/cbox/compare/v1.1.1...v1.1.2
+[1.1.1]: https://github.com/bradleydwyer/cbox/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/bradleydwyer/cbox/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/bradleydwyer/cbox/releases/tag/v1.0.0
