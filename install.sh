@@ -2,7 +2,7 @@
 # cbox installation script
 set -euo pipefail
 
-VERSION="1.1.1"
+VERSION="1.1.2"
 INSTALL_DIR="/usr/local/bin"
 REPO_URL="https://raw.githubusercontent.com/bradleydwyer/cbox/main"
 
