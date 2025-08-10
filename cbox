@@ -37,6 +37,13 @@ Environment Variables:
   CBOX_MEMORY=4g   Set container memory limit (default: 4g)
   CBOX_CPUS=4      Set container CPU limit (default: 2)
 
+Features:
+  • Rust/Cargo support with persistent dependency cache
+  • Cargo registry cached in ~/.cache/cbox/cargo-registry
+  • Cargo git deps cached in ~/.cache/cbox/cargo-git
+  • Cache automatically created and shared across all sessions
+  • Significantly speeds up Rust builds after first compilation
+
 Examples:
   cbox                        # Run in current directory
   cbox ~/project              # Run in specific directory  
@@ -270,12 +277,17 @@ WORKDIR="$(cd -- "$WORKDIR" && pwd)" || {
 
 mkdir -p "$CACHE_DIR"
 
+# Create persistent Cargo cache directories
+mkdir -p "$CACHE_DIR/cargo-registry"
+mkdir -p "$CACHE_DIR/cargo-git"
+
 # --- minimal image with Claude Code CLI ---
 if [[ ! -f "$DOCKERFILE" ]]; then
   cat >"$DOCKERFILE" <<'EOF'
 FROM node:20-bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git openssh-client ca-certificates tini bash less curl wget procps build-essential && \
+    git openssh-client ca-certificates tini bash less curl wget procps build-essential \
+    pkg-config libssl-dev sudo && \
     rm -rf /var/lib/apt/lists/*
 RUN npm i -g @anthropic-ai/claude-code@latest
 # Install line counting utilities
@@ -302,6 +314,11 @@ if [ -n "$HOST_UID" ] && [ -n "$HOST_GID" ]; then\n\
   groupadd -g $HOST_GID host 2>/dev/null || true\n\
   useradd -u $HOST_UID -g $HOST_GID -d /home/host -s /bin/bash host 2>/dev/null || true\n\
   chown -R $HOST_UID:$HOST_GID /home/host 2>/dev/null || true\n\
+  # Fix Rust/Cargo permissions for the host user\n\
+  chown -R $HOST_UID:$HOST_GID /opt/rust 2>/dev/null || true\n\
+  # Configure sudo for the host user\n\
+  echo "host ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/host\n\
+  chmod 440 /etc/sudoers.d/host\n\
   # Initialize Hermit for the host user\n\
   mkdir -p /home/host/bin && ln -sf /opt/hermit/bin/hermit /home/host/bin/hermit 2>/dev/null || true\n\
   exec gosu host "$@"\n\
@@ -342,6 +359,10 @@ vols=(-v "$WORKDIR":/work
 [[ -f "$HOME/.gitconfig" ]] && vols+=(-v "$HOME/.gitconfig":/home/host/.gitconfig:ro)
 [[ -f "$HOME/.ssh/known_hosts" ]] && vols+=(-v "$HOME/.ssh/known_hosts":/home/host/.ssh/known_hosts:ro)
 [[ -f "$HOME/.git-credentials" ]] && vols+=(-v "$HOME/.git-credentials":/home/host/.git-credentials:ro)
+
+# Mount persistent Cargo cache directories to speed up Rust builds
+vols+=(-v "$CACHE_DIR/cargo-registry":/opt/rust/registry)
+vols+=(-v "$CACHE_DIR/cargo-git":/opt/rust/git)
 
 # Set up command to run
 if [[ "$SHELL_MODE" == "1" ]]; then
