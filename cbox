@@ -286,6 +286,12 @@ RUN curl -LO https://github.com/boyter/scc/releases/latest/download/scc_Linux_x8
     mv scc /usr/local/bin/ && \
     chmod +x /usr/local/bin/scc && \
     rm scc_Linux_x86_64.tar.gz
+# Install Rust
+ENV RUSTUP_HOME=/opt/rust
+ENV CARGO_HOME=/opt/rust
+ENV PATH=/opt/rust/bin:$PATH
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path && \
+    chmod -R 755 /opt/rust
 # Install Hermit globally for all users
 RUN curl -fsSL https://github.com/cashapp/hermit/releases/latest/download/install.sh | HERMIT_USER_HOME=/opt/hermit bash && \
     ln -s /opt/hermit/bin/hermit /usr/local/bin/hermit && \
