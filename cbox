@@ -210,16 +210,18 @@ configure_github_authentication() {
   }
   
   # Helper function for secure token forwarding
+  # Returns the token arguments via stdout for array capture
   forward_github_token() {
     local token_var="$1" 
     local token_value="$2"
-    local -n temp_env_ref="$3"
     
     if validate_github_token "$token_value"; then
       # Use printf %q for proper shell escaping to prevent injection
       local escaped_token
       escaped_token=$(printf '%q' "$token_value")
-      temp_env_ref+=("-e" "${token_var}=${escaped_token}")
+      # Output the arguments for array capture
+      echo "-e"
+      echo "${token_var}=${escaped_token}"
       
       # Secure logging - only log token presence, not value
       if [[ "${CBOX_VERBOSE:-0}" == "1" ]]; then
@@ -250,8 +252,8 @@ configure_github_authentication() {
   }
   
   # Helper function for secure config directory mounting
+  # Returns the volume arguments via stdout for array capture
   mount_github_config() {
-    local -n temp_vols_ref="$1"
     local gh_config_dir="$HOME/.config/gh"
     
     # Atomic directory validation to prevent TOCTOU attacks
@@ -300,7 +302,9 @@ configure_github_authentication() {
     
     # Ensure canonical path matches expected location (prevent directory traversal)
     if [[ "$canonical_path" == "$HOME/.config/gh" ]]; then
-      temp_vols_ref+=(-v "$canonical_path":/home/host/.config/gh:ro)
+      # Output the arguments for array capture
+      echo "-v"
+      echo "$canonical_path:/home/host/.config/gh:ro"
       if [[ "${CBOX_VERBOSE:-0}" == "1" ]]; then
         echo "cbox: GitHub authentication: config directory mounted (read-only)" >&2
       fi
@@ -319,14 +323,24 @@ configure_github_authentication() {
     standard|restricted)
       # Process tokens in order of precedence (GH_TOKEN preferred over GITHUB_TOKEN)
       local auth_success=0
+      local token_args
       if [[ -n "${GH_TOKEN:-}" ]]; then
-        if forward_github_token "GH_TOKEN" "$GH_TOKEN" temp_env_vars; then
+        # Capture output as array elements
+        if token_args=$(forward_github_token "GH_TOKEN" "$GH_TOKEN"); then
+          # Read the output into array
+          while IFS= read -r line; do
+            temp_env_vars+=("$line")
+          done <<< "$token_args"
           auth_success=1
         elif [[ "${CBOX_VERBOSE:-0}" == "1" ]]; then
           echo "cbox: Warning - Failed to validate GH_TOKEN" >&2
         fi
       elif [[ -n "${GITHUB_TOKEN:-}" ]]; then
-        if forward_github_token "GITHUB_TOKEN" "$GITHUB_TOKEN" temp_env_vars; then
+        if token_args=$(forward_github_token "GITHUB_TOKEN" "$GITHUB_TOKEN"); then
+          # Read the output into array
+          while IFS= read -r line; do
+            temp_env_vars+=("$line")
+          done <<< "$token_args"
           auth_success=1
         elif [[ "${CBOX_VERBOSE:-0}" == "1" ]]; then
           echo "cbox: Warning - Failed to validate GITHUB_TOKEN" >&2
@@ -335,7 +349,12 @@ configure_github_authentication() {
       
       # Attempt to mount GitHub CLI config directory
       local config_success=0
-      if mount_github_config temp_vols; then
+      local config_args
+      if config_args=$(mount_github_config); then
+        # Read the output into array
+        while IFS= read -r line; do
+          temp_vols+=("$line")
+        done <<< "$config_args"
         config_success=1
       elif [[ "${CBOX_VERBOSE:-0}" == "1" ]]; then
         echo "cbox: Warning - Failed to mount GitHub config directory" >&2
