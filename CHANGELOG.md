@@ -27,6 +27,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Warns when overriding paranoid mode with less secure options
   - Validates security configuration consistency
   - Anti-bypass detection for security environment variables
+- **GitHub CLI Authentication**: Automatic forwarding of GitHub credentials
+  - Supports `GH_TOKEN` and `GITHUB_TOKEN` environment variables
+  - Mounts `~/.config/gh` directory for seamless GitHub CLI access
+  - Full token validation with modern GitHub token format support
+  - Security-aware: tokens blocked in paranoid mode, forwarded in standard/restricted
+  - Secure logging with SHA256 hash redaction for token presence
 - **Enhanced Documentation**: Complete security mode documentation
   - Updated help text with security options and examples
   - Security quick reference guide for common scenarios

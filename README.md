@@ -53,6 +53,45 @@ A simple Docker-based sandbox for running Claude Code with full network access a
   ssh-add ~/.ssh/id_rsa  # or your key path
   ```
 
+### GitHub CLI Authentication (Optional)
+
+cbox automatically forwards GitHub authentication from your host system:
+
+- **Environment Variables**: If you have `GH_TOKEN` or `GITHUB_TOKEN` set, they're automatically forwarded
+- **GitHub CLI Config**: Your `~/.config/gh` directory is mounted for seamless `gh` CLI access
+- **Security Modes**: 
+  - `standard`/`restricted`: Full GitHub access (tokens and config forwarded)
+  - `paranoid`: No GitHub authentication (maximum security isolation)
+
+No additional setup needed - if GitHub CLI works on your host, it works in cbox!
+
+#### Example Usage
+
+```bash
+# Create a pull request from within cbox
+cbox ~/my-project
+gh pr create --title "New feature" --body "Description"
+
+# Check GitHub authentication status
+cbox --shell
+gh auth status
+
+# List repository issues
+cbox ~/my-project -- gh issue list
+
+# Create a new release
+cbox ~/my-project -- gh release create v1.0.0 --notes "First release"
+```
+
+#### Required Token Permissions
+
+For GitHub CLI to work properly, your token needs these scopes:
+- `repo` - Full repository access
+- `read:org` - Read organization data  
+- `workflow` - Update GitHub Actions workflows (if needed)
+
+Create a token at: https://github.com/settings/tokens/new
+
 ## Installation
 
 ### Quick Install (Recommended)

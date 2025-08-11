@@ -190,6 +190,24 @@ ssh-add ~/.ssh/id_rsa
 
 ### Optional Variables
 
+#### `GH_TOKEN` / `GITHUB_TOKEN`
+GitHub authentication tokens. Automatically forwarded to the container in standard and restricted modes (blocked in paranoid mode for security). If both are set, `GH_TOKEN` takes precedence.
+
+```bash
+# Use environment variable
+export GH_TOKEN=<your-github-token>
+cbox
+
+# Or set inline
+GH_TOKEN=<token> cbox
+```
+
+**Security Notes:**
+- Tokens are validated for proper GitHub format before forwarding
+- Invalid tokens are rejected with warnings in verbose mode
+- Tokens are never forwarded in paranoid mode
+- Token presence is logged with SHA256 hash (first 8 chars) in verbose mode
+
 #### `CBOX_REBUILD`
 Force rebuild of the Docker image. Set to `1` to rebuild.
 
@@ -239,13 +257,19 @@ cbox automatically mounts the following volumes:
 
 | Host Path | Container Path | Access | Purpose |
 |-----------|---------------|--------|---------|
-| `$WORKDIR` | `/work` | read-write | Project files |
-| `$SSH_AUTH_SOCK` | `/ssh-agent` | socket | SSH authentication |
+| `$WORKDIR` | `/work` | read-write/read-only* | Project files |
+| `$SSH_AUTH_SOCK` | `/ssh-agent` | socket | SSH authentication** |
 | `~/.claude` | `/home/host/.claude` | read-write | Claude config/agents |
 | `~/.claude.json` | `/home/host/.claude.json` | read-write | Claude authentication |
 | `~/.gitconfig` | `/home/host/.gitconfig` | read-only | Git configuration |
+| `~/.config/gh` | `/home/host/.config/gh` | read-only | GitHub CLI config*** |
 | `~/.ssh/known_hosts` | `/home/host/.ssh/known_hosts` | read-only | SSH known hosts |
 | `~/.git-credentials` | `/home/host/.git-credentials` | read-only | Git credentials |
+
+**Notes:**
+- \* Read-only in paranoid mode, read-write in standard/restricted modes
+- \*\* Not mounted in paranoid mode (SSH agent disabled)
+- \*\*\* Only mounted in standard/restricted modes if directory exists
 
 ## Docker Container Details
 
@@ -357,6 +381,87 @@ docker ps | grep cbox
 
 # Clean up stopped containers
 docker container prune
+```
+
+## GitHub Authentication Troubleshooting
+
+### Issue: GitHub CLI not authenticated
+
+**Symptoms:** `gh: error: auth required` or similar errors
+
+**Solutions:**
+
+1. **Check authentication status:**
+```bash
+cbox --shell
+gh auth status
+```
+
+2. **Verify token is set on host:**
+```bash
+# Check if token exists
+echo $GH_TOKEN
+echo $GITHUB_TOKEN
+
+# Set token if missing
+export GH_TOKEN=<your-github-token>
+```
+
+3. **Verify token format:**
+- Modern tokens start with: `ghp_`, `gho_`, `ghu_`, `ghs_`, `ghr_`, or `github_pat_`
+- Legacy tokens are 40-character hex strings
+- Invalid formats are rejected with warnings in verbose mode
+
+4. **Check security mode:**
+```bash
+# GitHub auth is disabled in paranoid mode
+cbox --security-mode paranoid  # No GitHub access
+cbox --security-mode standard  # Full GitHub access (default)
+```
+
+### Issue: GitHub config not mounted
+
+**Symptoms:** GitHub CLI doesn't remember settings or authentication
+
+**Solutions:**
+
+1. **Check if config directory exists:**
+```bash
+ls -la ~/.config/gh
+```
+
+2. **Authenticate on host first:**
+```bash
+# Run this on your host system, not in cbox
+gh auth login
+```
+
+3. **Verify mounting in verbose mode:**
+```bash
+CBOX_VERBOSE=1 cbox 2>&1 | grep "GitHub"
+# Should show: "GitHub authentication: config directory mounted"
+```
+
+### Issue: Token validation failures
+
+**Symptoms:** "Invalid token format" warnings
+
+**Solutions:**
+
+1. **Check token format:**
+   - Must be alphanumeric with underscores only
+   - No spaces, quotes, or special characters
+   - Correct length (40 chars for classic, 93 for fine-grained)
+
+2. **Debug with verbose mode:**
+```bash
+CBOX_VERBOSE=1 cbox  # Check for GitHub auth messages
+```
+
+3. **Test token directly:**
+```bash
+# Test on host
+gh auth status --show-token
 ```
 
 ## Configuration File
