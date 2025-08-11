@@ -57,62 +57,6 @@ A simple Docker-based sandbox for running Claude Code with full network access a
   ssh-add ~/.ssh/id_rsa  # or your key path
   ```
 
-### GitHub CLI Authentication (Optional)
-
-cbox provides seamless GitHub authentication with automatic token forwarding:
-
-#### Automatic Authentication Methods
-
-1. **Environment Variables**: `GH_TOKEN` or `GITHUB_TOKEN` are automatically detected and forwarded
-2. **GitHub CLI Config**: Your `~/.config/gh` directory is mounted for full `gh` CLI access
-3. **macOS Keychain Integration**: Automatically extracts tokens from `gh` CLI when using keychain authentication
-   - No manual token export needed for macOS users
-   - Secure extraction prevents token exposure in process lists
-   - Works with GitHub's recommended keychain storage
-
-#### Security Modes & GitHub Access
-
-- **`standard`/`restricted` modes**: Full GitHub authentication (tokens and config forwarded)
-- **`paranoid` mode**: No GitHub authentication (maximum security isolation)
-
-#### How It Works
-
-When you run cbox, it automatically:
-1. Checks for `GH_TOKEN` or `GITHUB_TOKEN` environment variables
-2. If not found but `gh` CLI is authenticated, securely extracts the token
-3. Mounts your GitHub CLI config directory (`~/.config/gh`)
-4. Sets up proper environment variables in the container
-5. Validates token format and logs success (with SHA256 hash for security)
-
-No additional setup needed - if GitHub CLI works on your host, it works in cbox!
-
-#### Example Usage
-
-```bash
-# Create a pull request from within cbox
-cbox ~/my-project
-gh pr create --title "New feature" --body "Description"
-
-# Check GitHub authentication status
-cbox --shell
-gh auth status
-
-# List repository issues
-cbox ~/my-project -- gh issue list
-
-# Create a new release
-cbox ~/my-project -- gh release create v1.0.0 --notes "First release"
-```
-
-#### Required Token Permissions
-
-For GitHub CLI to work properly, your token needs these scopes:
-- `repo` - Full repository access
-- `read:org` - Read organization data  
-- `workflow` - Update GitHub Actions workflows (if needed)
-
-Create a token at: https://github.com/settings/tokens/new
-
 ## Installation
 
 ### Quick Install (Recommended)
@@ -249,6 +193,62 @@ docker run -it --entrypoint /bin/bash cbox:latest
 ```
 
 ## Configuration
+
+### GitHub CLI Authentication
+
+cbox provides seamless GitHub authentication with automatic token forwarding:
+
+#### Automatic Authentication Methods
+
+1. **Environment Variables**: `GH_TOKEN` or `GITHUB_TOKEN` are automatically detected and forwarded
+2. **GitHub CLI Config**: Your `~/.config/gh` directory is mounted for full `gh` CLI access
+3. **macOS Keychain Integration**: Automatically extracts tokens from `gh` CLI when using keychain authentication
+   - No manual token export needed for macOS users
+   - Secure extraction prevents token exposure in process lists
+   - Works with GitHub's recommended keychain storage
+
+#### Security Modes & GitHub Access
+
+- **`standard`/`restricted` modes**: Full GitHub authentication (tokens and config forwarded)
+- **`paranoid` mode**: No GitHub authentication (maximum security isolation)
+
+#### How It Works
+
+When you run cbox, it automatically:
+1. Checks for `GH_TOKEN` or `GITHUB_TOKEN` environment variables
+2. If not found but `gh` CLI is authenticated, securely extracts the token
+3. Mounts your GitHub CLI config directory (`~/.config/gh`)
+4. Sets up proper environment variables in the container
+5. Validates token format and logs success (with SHA256 hash for security)
+
+No additional setup needed - if GitHub CLI works on your host, it works in cbox!
+
+#### Example Usage
+
+```bash
+# Create a pull request from within cbox
+cbox ~/my-project
+gh pr create --title "New feature" --body "Description"
+
+# Check GitHub authentication status
+cbox --shell
+gh auth status
+
+# List repository issues
+cbox ~/my-project -- gh issue list
+
+# Create a new release
+cbox ~/my-project -- gh release create v1.0.0 --notes "First release"
+```
+
+#### Required Token Permissions
+
+For GitHub CLI to work properly, your token needs these scopes:
+- `repo` - Full repository access
+- `read:org` - Read organization data  
+- `workflow` - Update GitHub Actions workflows (if needed)
+
+Create a token at: https://github.com/settings/tokens/new
 
 ### Environment Variables
 
