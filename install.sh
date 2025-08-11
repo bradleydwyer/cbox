@@ -2,7 +2,7 @@
 # cbox installation script - updated for CDN cache bust
 set -euo pipefail
 
-VERSION="1.1.3"
+VERSION="1.1.4"
 INSTALL_DIR="/usr/local/bin"
 REPO_URL="https://raw.githubusercontent.com/bradleydwyer/cbox/main"
 
