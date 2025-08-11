@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.1] - 2025-08-11
+
+### Fixed
+- Fixed "unbound variable" error when running cbox without -e flags
+- Properly handle empty CLI_ENV_VARS and ENV_VARS arrays in bash strict mode
+- Environment variable processing now works correctly with `set -euo pipefail`
+
 ## [1.2.0] - 2025-08-11
 
 ### Added
@@ -165,7 +172,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for multiple concurrent instances
 - Easy cleanup and uninstallation
 
-[Unreleased]: https://github.com/bradleydwyer/cbox/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/bradleydwyer/cbox/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/bradleydwyer/cbox/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/bradleydwyer/cbox/compare/v1.1.6...v1.2.0
 [1.1.6]: https://github.com/bradleydwyer/cbox/compare/v1.1.5...v1.1.6
 [1.1.5]: https://github.com/bradleydwyer/cbox/compare/v1.1.4...v1.1.5

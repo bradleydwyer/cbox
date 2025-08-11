@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cat:*)",
+      "Bash(docker inspect:*)",
+      "Bash(./cbox-update)",
+      "Bash(git add:*)"
+    ],
+    "deny": []
+  }
+}
