@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2025-08-11
+
+### Added
+- New `-e` flag for explicit environment variable control
+  - Pass variables from host: `-e VAR`
+  - Set specific values: `-e VAR=value`
+  - Multiple variables supported with multiple `-e` flags
+- AWS Bedrock integration support through environment variables
+- Comprehensive documentation for environment variable usage
+- Security-focused design with no automatic variable passthrough
+- Warning messages for empty/unset variables in verbose mode
+
+### Changed
+- Environment variables must now be explicitly passed using `-e` flag
+- Enhanced security by requiring explicit specification of each variable
+- Updated help text to include new `-e` flag documentation
+- Improved documentation with AWS Bedrock examples and best practices
+
+### Security
+- No automatic environment variable inheritance - explicit control only
+- Prevents accidental exposure of sensitive environment variables
+- Makes security auditable with clear visibility of shared variables
+- Reduces attack surface by only passing necessary variables
+
 ## [1.1.6] - 2025-08-10
 
 ### Changed
@@ -141,7 +165,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for multiple concurrent instances
 - Easy cleanup and uninstallation
 
-[Unreleased]: https://github.com/bradleydwyer/cbox/compare/v1.1.6...HEAD
+[Unreleased]: https://github.com/bradleydwyer/cbox/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/bradleydwyer/cbox/compare/v1.1.6...v1.2.0
 [1.1.6]: https://github.com/bradleydwyer/cbox/compare/v1.1.5...v1.1.6
 [1.1.5]: https://github.com/bradleydwyer/cbox/compare/v1.1.4...v1.1.5
 [1.1.4]: https://github.com/bradleydwyer/cbox/compare/v1.1.3...v1.1.4
