@@ -34,7 +34,7 @@ Options:
   -e VAR=value     Pass environment variable with specific value
 
 Update Options:
-  --update         Show update instructions
+  --update         Auto-update cbox to latest version
   --update-check   Check for updates now
   --update-skip    Skip update notifications for 7 days
 
@@ -744,20 +744,80 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --update)
-      cat <<EOF
-To update cbox to the latest version:
-
-Option 1: Quick update (recommended)
-  curl -fsSL https://raw.githubusercontent.com/bradleydwyer/cbox/main/install.sh | bash
-
-Option 2: Manual update
-  git pull origin main  # If you cloned the repo
-  
-Option 3: Download directly
-  https://github.com/bradleydwyer/cbox/releases/latest
-
-After updating cbox, run 'cbox-update' to rebuild with latest Claude Code.
-EOF
+      echo "🔄 cbox Auto-Update"
+      echo ""
+      
+      # Check if we're in a git repository
+      if [[ -d .git ]] && git rev-parse --git-dir >/dev/null 2>&1; then
+        # Git repository update
+        echo "Detected git repository installation"
+        echo -n "Update cbox from GitHub? [Y/n]: "
+        read -r response
+        if [[ -z "$response" || "$response" =~ ^[Yy] ]]; then
+          echo "Updating cbox..."
+          
+          # Store current version for comparison
+          local old_version="$VERSION"
+          
+          # Perform git pull
+          if git pull origin main; then
+            echo "✅ Successfully updated cbox repository"
+            
+            # Check if version changed
+            local new_version=$(grep '^VERSION=' "$0" | head -1 | cut -d'"' -f2)
+            if [[ "$old_version" != "$new_version" ]]; then
+              echo "Updated from v$old_version to v$new_version"
+            fi
+            
+            # Rebuild if requested
+            echo ""
+            echo -n "Rebuild Docker image with latest updates? [Y/n]: "
+            read -r rebuild_response
+            if [[ -z "$rebuild_response" || "$rebuild_response" =~ ^[Yy] ]]; then
+              echo "Rebuilding cbox Docker image..."
+              CBOX_REBUILD=1 exec "$0" --verify
+            fi
+          else
+            echo "❌ Failed to update cbox. Please check your internet connection and try again."
+            exit 1
+          fi
+        else
+          echo "Update cancelled"
+        fi
+      else
+        # Non-git installation - use curl
+        echo "Updating cbox using installer script..."
+        echo -n "Download and install latest version? [Y/n]: "
+        read -r response
+        if [[ -z "$response" || "$response" =~ ^[Yy] ]]; then
+          echo "Downloading latest cbox..."
+          
+          # Create temp file for new version
+          local temp_file=$(mktemp)
+          local install_script=$(mktemp)
+          
+          # Download install script
+          if curl -fsSL https://raw.githubusercontent.com/bradleydwyer/cbox/main/install.sh -o "$install_script"; then
+            echo "Running installer..."
+            if bash "$install_script"; then
+              echo "✅ Successfully updated cbox"
+              echo ""
+              echo "Run 'cbox --verify' to rebuild the Docker image"
+            else
+              echo "❌ Installation failed"
+              rm -f "$install_script"
+              exit 1
+            fi
+            rm -f "$install_script"
+          else
+            echo "❌ Failed to download installer. Please check your internet connection."
+            rm -f "$temp_file" "$install_script"
+            exit 1
+          fi
+        else
+          echo "Update cancelled"
+        fi
+      fi
       exit 0
       ;;
     --update-check)
