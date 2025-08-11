@@ -80,43 +80,78 @@ check_for_updates() {
   [[ "$SECURITY_MODE" == "paranoid" ]] && return 0
   [[ "${CBOX_NO_UPDATE_CHECK:-}" == "1" ]] && return 0
   
-  # Rate limiting (24-hour cache)
+  # Rate limiting (24-hour cache) with validation
   local cache_file="$CACHE_DIR/last_update_check"
   if [[ -f "$cache_file" ]]; then
-    local cache_age=$(( $(date +%s) - $(stat -c %Y "$cache_file" 2>/dev/null || stat -f %m "$cache_file" 2>/dev/null || echo 0) ))
-    [[ $cache_age -lt 86400 ]] && return 0
+    # Validate cache file integrity
+    local cached_timestamp
+    cached_timestamp=$(cat "$cache_file" 2>/dev/null)
+    
+    # Ensure timestamp is numeric and reasonable (not in the future by more than 1 day)
+    if [[ "$cached_timestamp" =~ ^[0-9]+$ ]]; then
+      local current_time=$(date +%s)
+      local cache_age=$((current_time - cached_timestamp))
+      
+      # Valid if cache is less than 24 hours old and not in the future by more than 1 day
+      if [[ $cache_age -lt 86400 && $cache_age -gt -86400 ]]; then
+        return 0
+      fi
+    fi
+    
+    # Invalid cache file - remove it
+    rm -f "$cache_file" 2>/dev/null || true
   fi
   
   local api_url="https://api.github.com/repos/bradleydwyer/cbox/releases/latest"
   local latest_version=""
   
-  # Try tools in order of preference
-  if command -v curl >/dev/null 2>&1; then
-    latest_version=$(curl -s --max-time 5 --connect-timeout 3 "$api_url" 2>/dev/null | \
-      grep -o '"tag_name"[[:space:]]*:[[:space:]]*"[^"]*"' | \
-      sed 's/.*"v*\([^"]*\)"/\1/' | head -1)
-  elif command -v wget >/dev/null 2>&1; then
-    latest_version=$(wget -qO- --timeout=5 --connect-timeout=3 "$api_url" 2>/dev/null | \
-      grep -o '"tag_name"[[:space:]]*:[[:space:]]*"[^"]*"' | \
-      sed 's/.*"v*\([^"]*\)"/\1/' | head -1)
+  # Try tools in order of preference - use proper JSON parsing
+  if command -v jq >/dev/null 2>&1; then
+    # Preferred: Use jq for secure JSON parsing
+    local response
+    if command -v curl >/dev/null 2>&1; then
+      response=$(curl -s --fail --max-time 5 --connect-timeout 3 "$api_url" 2>/dev/null)
+    elif command -v wget >/dev/null 2>&1; then
+      response=$(wget -qO- --timeout=5 --connect-timeout=3 "$api_url" 2>/dev/null)
+    fi
+    
+    if [[ -n "$response" ]]; then
+      latest_version=$(echo "$response" | jq -r '.tag_name // ""' 2>/dev/null | sed 's/^v//')
+    fi
   elif command -v python3 >/dev/null 2>&1; then
+    # Fallback: Use Python's secure JSON parsing
     latest_version=$(python3 -c "
-import urllib.request, json, sys
+import urllib.request, json, sys, re
 try:
     with urllib.request.urlopen('$api_url', timeout=5) as r:
         data = json.loads(r.read())
-        print(data.get('tag_name', '').lstrip('v'))
+        version = data.get('tag_name', '').lstrip('v')
+        # Validate version format (semantic versioning)
+        if re.match(r'^[0-9]+\.[0-9]+\.[0-9]+$', version):
+            print(version)
 except: pass
 " 2>/dev/null)
   elif command -v python >/dev/null 2>&1; then
+    # Python 2 fallback with validation
     latest_version=$(python -c "
-import urllib2, json, sys
+import urllib2, json, sys, re
 try:
     r = urllib2.urlopen('$api_url', timeout=5)
     data = json.loads(r.read())
-    print(data.get('tag_name', '').lstrip('v'))
+    version = data.get('tag_name', '').lstrip('v')
+    # Validate version format (semantic versioning)
+    if re.match(r'^[0-9]+\.[0-9]+\.[0-9]+$', version):
+        print version
 except: pass
 " 2>/dev/null)
+  fi
+  
+  # Additional validation of version string
+  if [[ -n "$latest_version" ]]; then
+    # Ensure version only contains digits and dots
+    if [[ ! "$latest_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+      latest_version=""
+    fi
   fi
   
   # Show notification if update available
@@ -131,9 +166,12 @@ except: pass
 EOF
   fi
   
-  # Update cache
+  # Update cache with atomic operation
   mkdir -p "$(dirname "$cache_file")"
-  touch "$cache_file"
+  local temp_cache
+  temp_cache=$(mktemp "${cache_file}.XXXXXX") || return 1
+  echo "$(date +%s)" > "$temp_cache"
+  mv "$temp_cache" "$cache_file"
 }
 
 # --- Validation Functions ---
@@ -254,9 +292,12 @@ configure_github_authentication() {
          echo "$input_token" | grep -qE '^github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}$'; then
       
       # Check for shell metacharacters that could cause command injection
-      if [[ "$input_token" =~ [\$\`\(\)\{\}\[\]\<\>\|\&\;\'\"\\\n\r] ]]; then
-        return 1
-      fi
+      # Use case pattern matching to avoid ReDoS vulnerabilities
+      case "$input_token" in
+        *'$'*|*'`'*|*'('*|*')'*|*'{'*|*'}'*|*'['*|*']'*|*'<'*|*'>'*|*'|'*|*'&'*|*';'*|*"'"*|*'"'*|*'\'*|*$'\n'*|*$'\r'*)
+          return 1
+          ;;
+      esac
       
       return 0
     fi
@@ -729,17 +770,13 @@ EOF
       ;;
     --update-skip)
       mkdir -p "$CACHE_DIR"
-      # Set timestamp 7 days in the future
-      if date -d "+7 days" >/dev/null 2>&1; then
-        # GNU date (Linux)
-        date -d "+7 days" +%s > "$CACHE_DIR/last_update_check"
-      elif date -v "+7d" >/dev/null 2>&1; then
-        # BSD date (macOS)
-        date -v "+7d" +%s > "$CACHE_DIR/last_update_check"
-      else
-        # Fallback: current time + 7 days in seconds
-        echo $(($(date +%s) + 604800)) > "$CACHE_DIR/last_update_check"
-      fi
+      # Set timestamp 7 days in the future (604800 seconds = 7 days)
+      local future_timestamp=$(($(date +%s) + 604800))
+      # Atomic write to prevent race conditions
+      local temp_file
+      temp_file=$(mktemp "${CACHE_DIR}/last_update_check.XXXXXX") || exit 1
+      echo "$future_timestamp" > "$temp_file"
+      mv "$temp_file" "$CACHE_DIR/last_update_check"
       echo "Update notifications disabled for 7 days"
       exit 0
       ;;
