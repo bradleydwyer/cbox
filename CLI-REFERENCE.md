@@ -87,6 +87,68 @@ cbox -e AWS_PROFILE -e AWS_REGION -e CLAUDE_CODE_USE_BEDROCK
 - Use multiple `-e` flags to pass multiple variables
 - Values with spaces should be quoted: `-e "MY_VAR=value with spaces"`
 
+### Security Options (New in v1.3.0)
+
+#### `--security-mode MODE`
+Set the security mode for the container. Controls network access, SSH agent availability, and file system permissions.
+
+**Modes:**
+- `standard`: Host network, SSH agent enabled, read/write access (default - same as v1.2.1)
+- `restricted`: Bridge network with DNS, SSH agent enabled, read/write access  
+- `paranoid`: No network access, no SSH agent, read-only file system
+
+```bash
+cbox --security-mode standard   # Default mode (backward compatible)
+cbox --security-mode restricted # Isolated network
+cbox --security-mode paranoid   # Maximum security
+```
+
+#### `--network TYPE`
+Override the network configuration for the container. Takes precedence over security mode defaults.
+
+**Types:**
+- `host`: Direct access to host network (default for standard mode)
+- `bridge`: Isolated bridge network with DNS (default for restricted mode)
+- `none`: No network access (default for paranoid mode)
+
+```bash
+cbox --network host     # Host network access
+cbox --network bridge   # Isolated bridge network
+cbox --network none     # No network access
+```
+
+#### `--ssh-agent BOOL`
+Control SSH agent forwarding to the container. Takes precedence over security mode defaults.
+
+**Values:**
+- `true`: Enable SSH agent forwarding (default for standard/restricted modes)
+- `false`: Disable SSH agent forwarding (default for paranoid mode)
+
+```bash
+cbox --ssh-agent true   # Enable SSH agent
+cbox --ssh-agent false  # Disable SSH agent
+```
+
+#### `--read-only`
+Force the project directory to be mounted as read-only, preventing the container from modifying files.
+
+```bash
+cbox --read-only                           # Read-only project directory
+cbox --security-mode paranoid --read-only  # Explicit read-only in paranoid mode
+```
+
+**Security Combinations:**
+```bash
+# Maximum security for untrusted code
+cbox --security-mode paranoid ~/untrusted-project
+
+# Isolated network analysis 
+cbox --network bridge --read-only ~/analysis
+
+# Custom security configuration
+cbox --network none --ssh-agent false --read-only ~/suspicious-code
+```
+
 ## Arguments
 
 ### `DIRECTORY`
@@ -118,7 +180,7 @@ cbox -- chat "Fix the bug in main.py"  # Direct command
 ### Required Variables
 
 #### `SSH_AUTH_SOCK`
-Path to SSH agent socket. Required for Git operations with private repositories.
+Path to SSH agent socket. Required for Git operations with private repositories when SSH agent is enabled.
 
 ```bash
 # Start SSH agent if not running

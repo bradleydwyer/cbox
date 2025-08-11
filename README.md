@@ -104,6 +104,27 @@ cbox --verbose            # Run with debug output
 cbox --verify             # Verify installation
 ```
 
+### Security Options (New in v1.3.0)
+
+```bash
+# Security modes for different trust levels
+cbox --security-mode standard     # Full access (default - same as v1.2.1)
+cbox --security-mode restricted   # Bridge network, SSH agent, read/write
+cbox --security-mode paranoid     # No network, no SSH, read-only
+
+# Override individual security settings
+cbox --network host               # Host network (default)
+cbox --network bridge            # Isolated bridge network  
+cbox --network none              # No network access
+cbox --ssh-agent true            # Enable SSH agent (default)
+cbox --ssh-agent false           # Disable SSH agent
+cbox --read-only                 # Force read-only project directory
+
+# Security combinations
+cbox --security-mode paranoid ~/untrusted-code    # Maximum security
+cbox --network bridge --read-only ~/analysis      # Isolated analysis
+```
+
 ### Basic usage
 Run in current directory:
 ```bash
@@ -177,7 +198,7 @@ docker run -it --entrypoint /bin/bash cbox:latest
 | `XDG_CONFIG_HOME` | Override config directory location | ~/.config |
 | `XDG_DATA_HOME` | Override data directory location | ~/.local/share |
 | `TERM` | Terminal type passed to container | xterm-256color |
-| `SSH_AUTH_SOCK` | SSH agent socket path | (required) |
+| `SSH_AUTH_SOCK` | SSH agent socket path | (required for SSH operations) |
 
 ### Passing Environment Variables (New in v1.2.0)
 
@@ -310,7 +331,7 @@ For security, these are explicitly NOT shared with the container:
 - Other user home directories
 - Host system packages and binaries
 - Docker socket (container cannot control Docker)
-- Host network namespace (uses bridge network)
+- Host Docker daemon (container cannot control Docker)
 
 ### 7. Data Persistence
 
@@ -339,11 +360,12 @@ cbox automatically uses your host Claude authentication:
 
 ## Network Configuration
 
-- **Full network access**: Container runs with default Docker bridge network
+- **Default network access**: Container runs with **host network** (same as v1.2.1)
 - **Internet connectivity**: Can make outbound connections to any host
-- **Host access**: Can reach host services via `host.docker.internal`
-- **SSH forwarding**: Uses forwarded agent from host for Git operations
+- **Host access**: Direct access to host services and network interfaces
+- **SSH forwarding**: Uses forwarded agent from host for Git operations (when enabled)
 - **No egress filtering**: No firewall restrictions on outbound connections
+- **Security modes**: Bridge and none network options available for isolation
 
 ## File Permissions
 
