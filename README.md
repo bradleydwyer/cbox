@@ -555,7 +555,7 @@ Note: The `.cbox.json.example` file shows the planned configuration format, but 
 - [CHANGELOG.md](CHANGELOG.md) - Version history and release notes
 - [CONTRIBUTING.md](CONTRIBUTING.md) - Contribution guidelines
 - [SECURITY.md](SECURITY.md) - Security features and best practices
-- [SECRET_SCANNING.md](SECRET_SCANNING.md) - Git pre-commit hooks and secret scanning setup
+- [SECRET_SCANNING.md](docs/SECRET_SCANNING.md) - Git pre-commit hooks and secret scanning setup
 
 ## License
 

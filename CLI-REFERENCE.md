@@ -431,7 +431,7 @@ docker container prune
 - [README.md](README.md) - Main documentation
 - [CONTRIBUTING.md](CONTRIBUTING.md) - Contribution guidelines
 - [CHANGELOG.md](CHANGELOG.md) - Version history
-- [SECURITY_AUDIT.md](SECURITY_AUDIT.md) - Security analysis
+- [SECURITY_AUDIT_REPORT.md](docs/SECURITY_AUDIT_REPORT.md) - Security analysis
 
 ## Support
 

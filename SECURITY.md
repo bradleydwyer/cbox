@@ -119,7 +119,7 @@ The project includes git pre-commit hooks for preventing accidental secret commi
 
 - **Gitleaks**: Fast secret detection
 - **TruffleHog**: Comprehensive scanning with verification
-- See [SECRET_SCANNING.md](SECRET_SCANNING.md) for setup instructions
+- See [SECRET_SCANNING.md](docs/SECRET_SCANNING.md) for setup instructions
 
 ## Security Tools Integration
 
