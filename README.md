@@ -16,9 +16,10 @@
 > 🔴 **SECURITY NOTICE: This tool shares significant resources with the Docker container** 🔴
 >
 > - **Your Claude API token** (`~/.claude.json`) is accessible to the container
+> - **Your GitHub credentials** (tokens and `~/.config/gh`) are forwarded to the container
 > - **Your entire working directory** has full read/write access from the container
 > - **Your Git configuration and SSH agent** are exposed to the container
-> - **The container has UNRESTRICTED network access** to any service
+> - **The container has UNRESTRICTED network access** to any service (in standard mode)
 > - **Up to 1.4 GB of RAM** is used for temporary filesystems
 > 
 > See [Complete Shared Resources Documentation](#complete-shared-resources-documentation) for full details.
