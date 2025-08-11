@@ -106,6 +106,8 @@ cbox --verify             # Verify installation
 
 ### Security Options (New in v1.3.0)
 
+**Default Configuration:** Standard mode with host network access (backward compatible with v1.2.1)
+
 ```bash
 # Security modes for different trust levels
 cbox --security-mode standard     # Full access (default - same as v1.2.1)
@@ -198,7 +200,7 @@ docker run -it --entrypoint /bin/bash cbox:latest
 | `XDG_CONFIG_HOME` | Override config directory location | ~/.config |
 | `XDG_DATA_HOME` | Override data directory location | ~/.local/share |
 | `TERM` | Terminal type passed to container | xterm-256color |
-| `SSH_AUTH_SOCK` | SSH agent socket path | (required for SSH operations) |
+| `SSH_AUTH_SOCK` | SSH agent socket path | (required when --ssh-agent true, default for standard/restricted modes) |
 
 ### Passing Environment Variables (New in v1.2.0)
 

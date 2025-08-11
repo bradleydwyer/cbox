@@ -180,7 +180,7 @@ cbox -- chat "Fix the bug in main.py"  # Direct command
 ### Required Variables
 
 #### `SSH_AUTH_SOCK`
-Path to SSH agent socket. Required for Git operations with private repositories when SSH agent is enabled.
+Path to SSH agent socket. Required for Git operations with private repositories when SSH agent is enabled (default for standard and restricted modes, disabled in paranoid mode).
 
 ```bash
 # Start SSH agent if not running

@@ -47,13 +47,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Created comprehensive security audit reports and user guides
 - Updated CLI reference with complete security option documentation
 - Added migration guidance for users wanting enhanced security controls
-  - `--security-mode MODE`: Set security mode (standard|restricted|paranoid)
-  - `--network TYPE`: Override network type (host|bridge|none)
-  - `--ssh-agent BOOL`: Override SSH agent setting (true|false)
-  - `--read-only`: Force read-only project directory mount
-- **Comprehensive Input Validation**: All security arguments validated with strict whitelists
-- **Security Configuration Warnings**: Warns when overriding security mode defaults
-- **Anti-bypass Protection**: Prevents security bypass attempts through environment variables
 
 ### Security
 - Enhanced Docker security with network isolation options
@@ -66,12 +59,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Extended help text to include all new security options
 - Enhanced Docker integration with network configuration control
 - Improved error messages for security-related failures
-
-### Documentation
-- Added comprehensive security modes documentation
-- Updated CLI reference with security options
-- Added security quick reference guide
-- Enhanced examples with security mode usage
 
 ## [1.2.1] - 2025-08-11
 
