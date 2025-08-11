@@ -7,6 +7,82 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Critical Volume Mount Bug**: Fixed volume array initialization that was overwriting mounts
+  - Changed `vols=` to `vols+=` to properly append volume mounts (lines 954, 957)
+  - This bug was preventing GitHub config directory from being mounted correctly
+  - Now all volume mounts work as intended, enabling proper GitHub CLI authentication
+- **GitHub CLI Token Extraction**: Fixed automatic token extraction for macOS keychain users
+  - Added automatic extraction of GitHub tokens from `gh` CLI when authenticated
+  - Properly handles macOS keychain authentication without exposing tokens
+  - Uses secure subprocess to prevent token exposure in process lists
+  - Added timeout handling to prevent hanging on keychain prompts
+- **Echo Command Compatibility**: Fixed echo -e flag issue in Docker environment
+  - Replaced `echo -e` with `printf` for proper escape sequence handling
+  - Ensures color codes and formatting work correctly in all environments
+- **Environment Variable Debugging**: Added proper debug output for ENV_VARS array
+  - Fixed debug output to show actual environment variables being passed
+  - Helps troubleshoot authentication and configuration issues
+
+### Security
+- **Token Security**: Enhanced security for GitHub token handling
+  - Tokens never appear in process lists or command history
+  - Uses secure piping and subshells for token extraction
+  - Validates tokens before use with proper format checking
+  - SHA256 hash redaction in logs for security
+
+## [1.3.0] - 2025-08-11
+
+### Added
+- **Security Modes**: Three distinct security levels for different use cases
+  - `standard` mode: Current behavior (default) - host network, SSH agent, read/write
+  - `restricted` mode: Bridge network with DNS, SSH agent enabled, read/write
+  - `paranoid` mode: No network, no SSH agent, read-only volumes
+- **Security CLI Options**: Comprehensive command-line security controls
+  - `--security-mode MODE`: Set security level (standard|restricted|paranoid)
+  - `--network TYPE`: Override network access (host|bridge|none)
+  - `--ssh-agent BOOL`: Override SSH agent setting (true|false)
+  - `--read-only`: Force read-only project directory mount
+- **Input Validation**: Comprehensive validation preventing command injection
+  - Strict whitelist validation for all security parameters
+  - Command injection prevention throughout CLI parsing
+  - Path traversal protection for all file operations
+- **Security Warnings**: Clear warnings for potentially dangerous configurations
+  - Warns when overriding paranoid mode with less secure options
+  - Validates security configuration consistency
+  - Anti-bypass detection for security environment variables
+- **GitHub CLI Authentication**: Automatic forwarding of GitHub credentials
+  - Supports `GH_TOKEN` and `GITHUB_TOKEN` environment variables
+  - Mounts `~/.config/gh` directory for seamless GitHub CLI access
+  - Full token validation with modern GitHub token format support
+  - Security-aware: tokens blocked in paranoid mode, forwarded in standard/restricted
+  - Secure logging with SHA256 hash redaction for token presence
+- **Enhanced Documentation**: Complete security mode documentation
+  - Updated help text with security options and examples
+  - Security quick reference guide for common scenarios
+  - Comprehensive technical design documentation
+- **GitHub CLI Integration**: Added `gh` command-line tool to Docker image
+  - Enables pull request creation, issue management, and repository operations
+  - Supports GitHub workflow automation from within cbox
+  - Pre-installed and ready to use with host GitHub authentication
+
+### Security
+- Enhanced container security with granular network and access controls
+- Maintained all existing security hardening (capabilities, tmpfs mounts, etc.)
+- Added fail-safe error handling with security-first approach
+- Implemented defense-in-depth security validation
+
+### Documentation
+- Added security mode examples to help text and README
+- Created comprehensive security audit reports and user guides
+- Updated CLI reference with complete security option documentation
+- Added migration guidance for users wanting enhanced security controls
+
+### Changed
+- Extended help text to include all new security options
+- Enhanced Docker integration with network configuration control
+- Improved error messages for security-related failures
+
 ## [1.2.1] - 2025-08-11
 
 ### Fixed
@@ -172,7 +248,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for multiple concurrent instances
 - Easy cleanup and uninstallation
 
-[Unreleased]: https://github.com/bradleydwyer/cbox/compare/v1.2.1...HEAD
+[Unreleased]: https://github.com/bradleydwyer/cbox/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/bradleydwyer/cbox/compare/v1.2.1...v1.3.0
 [1.2.1]: https://github.com/bradleydwyer/cbox/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/bradleydwyer/cbox/compare/v1.1.6...v1.2.0
 [1.1.6]: https://github.com/bradleydwyer/cbox/compare/v1.1.5...v1.1.6

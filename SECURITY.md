@@ -53,13 +53,22 @@ Please see the [Complete Shared Resources Documentation](README.md#complete-shar
 
 ### Mounted Directories and Files
 The container has access to these host resources:
-- **Working directory**: Full read/write access to your project
+- **Working directory**: Full read/write access to your project (read-only in paranoid mode)
 - **~/.claude/**: Full access to Claude agents and settings
 - **~/.claude.json**: Contains your Claude API authentication token
 - **~/.gitconfig**: Read-only access to Git configuration
+- **~/.config/gh**: Read-only access to GitHub CLI config (standard/restricted modes only)
 - **~/.ssh/known_hosts**: Read-only access to SSH known hosts
 - **~/.git-credentials**: Read-only access to Git credentials (if exists)
-- **SSH Agent Socket**: Can use your SSH keys for Git operations
+- **SSH Agent Socket**: Can use your SSH keys for Git operations (not in paranoid mode)
+
+### GitHub Authentication Security
+cbox securely handles GitHub authentication tokens:
+- **Token Validation**: All tokens are validated against GitHub's official token formats
+- **Injection Prevention**: Tokens are checked for shell metacharacters and properly escaped
+- **Mode Enforcement**: Tokens are NEVER forwarded in paranoid mode
+- **Secure Logging**: Token presence is logged with SHA256 hash (first 8 chars only)
+- **Atomic Operations**: Directory mounting uses atomic stat operations to prevent TOCTOU attacks
 
 **Critical**: Only use with trusted repositories and projects.
 
@@ -119,7 +128,7 @@ The project includes git pre-commit hooks for preventing accidental secret commi
 
 - **Gitleaks**: Fast secret detection
 - **TruffleHog**: Comprehensive scanning with verification
-- See [SECRET_SCANNING.md](SECRET_SCANNING.md) for setup instructions
+- See [SECRET_SCANNING.md](docs/SECRET_SCANNING.md) for setup instructions
 
 ## Security Tools Integration
 

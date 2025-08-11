@@ -2,7 +2,7 @@
 # cbox: run Claude Code in a Docker sandbox with open network + SSH agent
 set -euo pipefail
 
-VERSION="1.2.1"
+VERSION="1.3.0"
 IMAGE="cbox:latest"
 CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/cbox"
 DOCKERFILE="${CACHE_DIR}/Dockerfile"
@@ -33,6 +33,12 @@ Options:
   -e VAR           Pass environment variable to container
   -e VAR=value     Pass environment variable with specific value
 
+Security Options:
+  --security-mode MODE    Set security mode: standard|restricted|paranoid (default: standard)
+  --network TYPE          Override network type: host|bridge|none (overrides mode default)  
+  --ssh-agent BOOL        Override SSH agent setting: true|false (overrides mode default)
+  --read-only             Force read-only project directory mount
+
 Environment Variables:
   CBOX_REBUILD=1   Force rebuild Docker image
   CBOX_VERBOSE=1   Enable verbose debug output
@@ -40,6 +46,7 @@ Environment Variables:
   CBOX_CPUS=4      Set container CPU limit (default: 2)
 
 Features:
+  • GitHub CLI (gh) for pull requests, issues, and repository management
   • Rust/Cargo support with persistent dependency cache
   • Cargo registry cached in ~/.cache/cbox/cargo-registry
   • Cargo git deps cached in ~/.cache/cbox/cargo-git
@@ -54,12 +61,66 @@ Examples:
   cbox -e AWS_PROFILE -e AWS_REGION       # Pass AWS environment variables
   cbox -e "ANTHROPIC_MODEL=claude-opus-4-1" # Set specific model
   CBOX_MEMORY=4g cbox                     # Run with 4GB memory limit
+  cbox --security-mode restricted         # Run with restricted security mode
+  cbox --network none --ssh-agent false   # Override network and SSH agent settings
+  cbox --read-only --security-mode paranoid # Force read-only with paranoid security
 
 For more information, see: https://github.com/bradleydwyer/cbox
 EOF
 }
 
 # --- Validation Functions ---
+
+# Validate security mode argument
+validate_security_mode() {
+  local mode="$1"
+  
+  # Only allow specific security modes to prevent injection
+  case "$mode" in
+    standard|restricted|paranoid)
+      return 0
+      ;;
+    *)
+      echo "cbox: Invalid security mode: $mode" >&2
+      echo "  Valid modes: standard, restricted, paranoid" >&2
+      return 1
+      ;;
+  esac
+}
+
+# Validate network type argument  
+validate_network_type() {
+  local network="$1"
+  
+  # Only allow specific network types to prevent injection
+  case "$network" in
+    host|bridge|none)
+      return 0
+      ;;
+    *)
+      echo "cbox: Invalid network type: $network" >&2
+      echo "  Valid types: host, bridge, none" >&2
+      return 1
+      ;;
+  esac
+}
+
+# Validate boolean argument (for SSH agent)
+validate_boolean() {
+  local value="$1"
+  local arg_name="$2"
+  
+  case "$value" in
+    true|false)
+      return 0
+      ;;
+    *)
+      echo "cbox: Invalid boolean value for $arg_name: $value" >&2
+      echo "  Valid values: true, false" >&2
+      return 1
+      ;;
+  esac
+}
 
 # Validate resource limits
 validate_resource_limits() {
@@ -80,6 +141,461 @@ validate_resource_limits() {
   return 0
 }
 
+# --- GitHub CLI Authentication Configuration ---
+
+# Configure GitHub CLI authentication based on security mode and available credentials
+configure_github_authentication() {
+  local mode="$1"
+  
+  # Validate required parameter
+  if [[ -z "$mode" ]]; then
+    echo "cbox: Internal error - configure_github_authentication called without mode" >&2
+    return 1
+  fi
+  
+  # Secure token validation function - fixed for modern GitHub tokens
+  validate_github_token() {
+    local input_token
+    input_token="$1" # gitleaks:allow
+    
+    # Length limits to prevent ReDoS attacks
+    if [[ ${#input_token} -lt 20 ]] || [[ ${#input_token} -gt 200 ]]; then
+      return 1
+    fi
+    
+    # Validate against current GitHub token formats (2024)
+    # Classic personal access tokens: PREFIX_36_random_chars (40 total)
+    # OAuth tokens: Different prefix, same 36 char pattern (40 total) 
+    # User-to-server tokens: Another prefix, 36 chars (40 total)
+    # Server-to-server tokens: Different prefix, 36 chars (40 total)
+    # Refresh tokens: Another prefix type, 36 chars (40 total)
+    # Fine-grained PAT: Longer prefix with 59 char suffix (~93 total)
+    
+    # Use grep to avoid ReDoS vulnerabilities in bash regex
+    # Check if grep is available first
+    if ! command -v grep >/dev/null 2>&1; then
+      # Fallback to basic bash pattern matching (less secure but functional)
+      case "$input_token" in
+        gh[pou]_????????????????????????????????*|gh[sr]_????????????????????????????????*|github_pat_*_???????????????????????????????????????????????????????????*)
+          ;;
+        *)
+          return 1
+          ;;
+      esac
+    elif echo "$input_token" | grep -qE '^gh[pou]_[A-Za-z0-9]{36}$' || \
+         echo "$input_token" | grep -qE '^gh[sr]_[A-Za-z0-9]{36}$' || \
+         echo "$input_token" | grep -qE '^github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}$'; then
+      
+      # Check for shell metacharacters that could cause command injection
+      if [[ "$input_token" =~ [\$\`\(\)\{\}\[\]\<\>\|\&\;\'\"\\\n\r] ]]; then
+        return 1
+      fi
+      
+      return 0
+    fi
+    
+    # Legacy 40-character hex tokens (pre-2021, still valid but deprecated)  
+    if command -v grep >/dev/null 2>&1; then
+      if echo "$input_token" | grep -qE '^[a-f0-9]{40}$'; then
+        return 0
+      fi
+    else
+      # Fallback: basic length and character validation
+      if [[ ${#input_token} -eq 40 ]] && [[ "$input_token" =~ ^[a-f0-9]+$ ]]; then
+        return 0
+      fi
+    fi
+    
+    return 1
+  }
+  
+  # Helper function for secure token forwarding
+  # Returns the token arguments via stdout for array capture
+  forward_github_token() {
+    local token_var="$1" 
+    local token_value="$2"
+    
+    if validate_github_token "$token_value"; then
+      # Use printf %q for proper shell escaping to prevent injection
+      local escaped_token
+      escaped_token=$(printf '%q' "$token_value")
+      # Output the arguments for array capture
+      # Use printf to avoid echo interpreting -e as a flag
+      printf '%s\n' "-e"
+      printf '%s\n' "${token_var}=${escaped_token}"
+      
+      # Secure logging - only log token presence, not value
+      if [[ "${CBOX_VERBOSE:-0}" == "1" ]]; then
+        local token_hash="present"
+        # Try multiple hash utilities with secure fallback
+        # All operations redirect stderr to /dev/null to prevent token exposure
+        if command -v sha256sum >/dev/null 2>&1; then
+          token_hash=$(echo -n "$token_value" | sha256sum 2>/dev/null | cut -c1-8 2>/dev/null || echo "present")
+        elif command -v shasum >/dev/null 2>&1; then
+          token_hash=$(echo -n "$token_value" | shasum -a 256 2>/dev/null | cut -c1-8 2>/dev/null || echo "present")
+        elif command -v openssl >/dev/null 2>&1; then
+          token_hash=$(echo -n "$token_value" | openssl dgst -sha256 2>/dev/null | cut -d' ' -f2 2>/dev/null | cut -c1-8 2>/dev/null || echo "present")
+        fi
+        # Additional security: ensure token_hash doesn't contain sensitive data
+        if [[ ${#token_hash} -gt 16 ]] || [[ "$token_hash" =~ [A-Z]{20} ]]; then
+          token_hash="present"
+        fi
+        echo "cbox: GitHub authentication: ${token_var} [hash:${token_hash}...] forwarded" >&2
+      fi
+      return 0
+    else
+      # Only show validation errors in verbose mode to avoid information leakage
+      if [[ "${CBOX_VERBOSE:-0}" == "1" ]]; then
+        echo "cbox: Warning - GitHub token format validation failed for ${token_var}" >&2
+      fi
+      return 1
+    fi
+  }
+  
+  # Helper function for secure config directory mounting
+  # Returns the volume arguments via stdout for array capture
+  mount_github_config() {
+    local gh_config_dir="$HOME/.config/gh"
+    
+    # Atomic directory validation to prevent TOCTOU attacks
+    # Use a single stat call to get all file information atomically
+    local stat_output
+    
+    # Detect stat version (macOS uses BSD stat, Linux uses GNU stat)
+    if stat --version >/dev/null 2>&1; then
+      # GNU stat (Linux)
+      if ! stat_output=$(stat -L -c "%F:%u:%g:%a" "$gh_config_dir" 2>/dev/null); then
+        # Path doesn't exist or is not accessible
+        return 1
+      fi
+    else
+      # BSD stat (macOS)
+      if ! stat_output=$(stat -L -f "%HT:%u:%g:%Mp%Lp" "$gh_config_dir" 2>/dev/null); then
+        # Path doesn't exist or is not accessible
+        return 1
+      fi
+      # Convert BSD stat output to match GNU format
+      stat_output="${stat_output/Directory/directory}"
+    fi
+    
+    # Parse stat output: file_type:uid:gid:permissions
+    IFS=':' read -r file_type owner_uid owner_gid permissions <<< "$stat_output"
+    
+    # Verify it's a directory
+    if [[ "$file_type" != "directory" ]]; then
+      return 1
+    fi
+    
+    # Verify ownership (prevent privilege escalation)
+    local current_uid current_gid
+    current_uid=$(id -u)
+    current_gid=$(id -g)
+    if [[ "$owner_uid" != "$current_uid" ]]; then
+      return 1
+    fi
+    
+    # Additional security check: ensure no symlinks in path components
+    # This prevents attacks through symlinked parent directories
+    local parent_dir
+    parent_dir=$(dirname "$gh_config_dir")
+    if [[ -L "$parent_dir" ]] || [[ -L "$gh_config_dir" ]]; then
+      return 1
+    fi
+    
+    # Final validation: ensure readable and resolve canonical path
+    if [[ ! -r "$gh_config_dir" ]]; then
+      return 1
+    fi
+    
+    local canonical_path="$gh_config_dir"
+    if command -v realpath >/dev/null 2>&1; then
+      canonical_path=$(realpath "$gh_config_dir" 2>/dev/null || echo "$gh_config_dir")
+    elif command -v readlink >/dev/null 2>&1; then
+      canonical_path=$(readlink -f "$gh_config_dir" 2>/dev/null || echo "$gh_config_dir")
+    fi
+    
+    # Ensure canonical path matches expected location (prevent directory traversal)
+    if [[ "$canonical_path" == "$HOME/.config/gh" ]]; then
+      # Output the arguments for array capture
+      echo "-v"
+      echo "$canonical_path:/home/host/.config/gh:ro"
+      if [[ "${CBOX_VERBOSE:-0}" == "1" ]]; then
+        echo "cbox: GitHub authentication: config directory mounted (read-only)" >&2
+      fi
+      return 0
+    fi
+    
+    return 1
+  }
+  
+  # Use local arrays for transactional behavior - only commit on success
+  local temp_env_vars=()
+  local temp_vols=()
+  
+  # Configure authentication based on security mode
+  case "$mode" in
+    standard|restricted)
+      # Process tokens in order of precedence (GH_TOKEN preferred over GITHUB_TOKEN)
+      local auth_success=0
+      local token_args
+      if [[ -n "${GH_TOKEN:-}" ]]; then
+        # Capture output as array elements
+        if token_args=$(forward_github_token "GH_TOKEN" "$GH_TOKEN"); then
+          # Read the output into array
+          while IFS= read -r line; do
+            temp_env_vars+=("$line")
+          done <<< "$token_args"
+          auth_success=1
+        elif [[ "${CBOX_VERBOSE:-0}" == "1" ]]; then
+          echo "cbox: Warning - Failed to validate GH_TOKEN" >&2
+        fi
+      elif [[ -n "${GITHUB_TOKEN:-}" ]]; then
+        if token_args=$(forward_github_token "GITHUB_TOKEN" "$GITHUB_TOKEN"); then
+          # Read the output into array
+          while IFS= read -r line; do
+            temp_env_vars+=("$line")
+          done <<< "$token_args"
+          auth_success=1
+        elif [[ "${CBOX_VERBOSE:-0}" == "1" ]]; then
+          echo "cbox: Warning - Failed to validate GITHUB_TOKEN" >&2
+        fi
+      elif command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+        # Attempt to extract token from gh CLI if available and authenticated
+        # This handles macOS keychain authentication
+        if [[ "${CBOX_VERBOSE:-0}" == "1" ]]; then
+          echo "cbox: Attempting to extract GitHub token from gh CLI..." >&2
+        fi
+        local extracted_token
+        # Use a subshell to prevent token from appearing in process list
+        # The token is piped directly and never appears as an argument
+        if extracted_token=$(
+          set +x  # Ensure trace is off
+          # Prevent history recording
+          set +o history 2>/dev/null || true
+          # Extract token with timeout to prevent hanging on keychain prompts
+          # Note: timeout may not be available on macOS, use if available
+          if command -v timeout >/dev/null 2>&1; then
+            timeout 2s gh auth token 2>/dev/null
+          else
+            # Fallback without timeout - may hang on keychain prompt
+            gh auth token 2>/dev/null
+          fi
+        ) && [[ -n "$extracted_token" ]]; then
+          # Validate the extracted token
+          if token_args=$(forward_github_token "GH_TOKEN" "$extracted_token"); then
+            # Read the output into array
+            while IFS= read -r line; do
+              temp_env_vars+=("$line")
+            done <<< "$token_args"
+            auth_success=1
+            if [[ "${CBOX_VERBOSE:-0}" == "1" ]]; then
+              echo "cbox: GitHub authentication extracted from gh CLI (keychain)" >&2
+            fi
+          elif [[ "${CBOX_VERBOSE:-0}" == "1" ]]; then
+            echo "cbox: Warning - Failed to validate extracted GitHub token" >&2
+          fi
+          # Clear the extracted token immediately
+          unset extracted_token
+        fi
+      fi
+      
+      # Attempt to mount GitHub CLI config directory
+      local config_success=0
+      local config_args
+      if config_args=$(mount_github_config); then
+        # Read the output into array
+        while IFS= read -r line; do
+          temp_vols+=("$line")
+        done <<< "$config_args"
+        # Set GH_CONFIG_DIR so gh CLI finds the mounted config
+        temp_env_vars+=("-e")
+        temp_env_vars+=("GH_CONFIG_DIR=/home/host/.config/gh")
+        config_success=1
+      elif [[ "${CBOX_VERBOSE:-0}" == "1" ]]; then
+        echo "cbox: Warning - Failed to mount GitHub config directory" >&2
+      fi
+      
+      # Log authentication status in verbose mode
+      if [[ "${CBOX_VERBOSE:-0}" == "1" ]]; then
+        if [[ "$auth_success" == "1" ]] || [[ "$config_success" == "1" ]]; then
+          echo "cbox: GitHub authentication configured successfully" >&2
+        else
+          echo "cbox: No valid GitHub authentication found" >&2
+        fi
+      fi
+      ;;
+      
+    paranoid)
+      # In paranoid mode, warn if GitHub auth is available but not forwarded
+      if [[ "${CBOX_VERBOSE:-0}" == "1" ]]; then
+        if [[ -n "${GH_TOKEN:-}${GITHUB_TOKEN:-}" ]] || [[ -d "$HOME/.config/gh" ]]; then
+          cat >&2 <<-EOF
+			cbox: ⚠️  PARANOID MODE: GitHub authentication disabled
+			  Tokens and configuration will NOT be forwarded to container.
+			  Switch to 'standard' or 'restricted' mode to enable GitHub access.
+			EOF
+        fi
+      fi
+      # No GitHub config mounting or token forwarding in paranoid mode
+      ;;
+      
+    *)
+      echo "cbox: Internal error - invalid security mode: $mode" >&2
+      return 1
+      ;;
+  esac
+  
+  # Network consistency validation - fail fast on unusable configurations
+  if [[ "$RESOLVED_NETWORK" == "none" ]] && [[ ${#temp_env_vars[@]} -gt 0 ]]; then
+    for env_var in "${temp_env_vars[@]}"; do
+      if [[ "$env_var" =~ (GH_TOKEN|GITHUB_TOKEN) ]]; then
+        echo "cbox: Configuration Error: GitHub tokens present but network disabled" >&2
+        echo "  GitHub CLI operations will fail without network access" >&2
+        echo "  Remove tokens or change --network setting" >&2
+        return 1
+      fi
+    done
+  fi
+  
+  # Atomic commit - only modify global arrays if all validations passed
+  if [[ ${#temp_env_vars[@]} -gt 0 ]]; then
+    ENV_VARS+=("${temp_env_vars[@]}")
+  fi
+  if [[ ${#temp_vols[@]} -gt 0 ]]; then
+    vols+=("${temp_vols[@]}")
+  fi
+  
+  return 0
+}
+
+# --- Security Configuration Resolution Function ---
+
+# Resolve final security configuration based on mode and overrides
+resolve_security_configuration() {
+  local mode="$1"
+  local network_override="$2"
+  local ssh_override="$3"
+  local read_only_override="$4"
+  
+  # Initialize with mode defaults
+  local final_network=""
+  local final_ssh=""
+  local final_read_only=""
+  
+  # Apply security mode defaults
+  case "$mode" in
+    standard)
+      # Default behavior - full network, SSH agent, writable
+      final_network="host"
+      final_ssh="true"
+      final_read_only="false"
+      ;;
+    restricted)
+      # Balanced security - isolated network, SSH agent, writable
+      final_network="bridge"
+      final_ssh="true"
+      final_read_only="false"
+      ;;
+    paranoid)
+      # Maximum security - isolated network, no SSH, read-only
+      # Note: bridge network required for Claude Code functionality
+      final_network="bridge"
+      final_ssh="false"
+      final_read_only="true"
+      ;;
+    *)
+      echo "cbox: Internal error - invalid security mode: $mode" >&2
+      exit 1
+      ;;
+  esac
+  
+  # Apply explicit overrides (if provided)
+  [[ -n "$network_override" ]] && final_network="$network_override"
+  [[ -n "$ssh_override" ]] && final_ssh="$ssh_override"
+  [[ "$read_only_override" == "1" ]] && final_read_only="true"
+  
+  # Security validation and warnings
+  validate_security_consistency "$mode" "$final_network" "$final_ssh" "$final_read_only"
+  
+  # Export resolved configuration
+  RESOLVED_NETWORK="$final_network"
+  RESOLVED_SSH_AGENT="$final_ssh"
+  RESOLVED_READ_ONLY="$final_read_only"
+  
+  # Log configuration in verbose mode
+  if [[ "${CBOX_VERBOSE:-0}" == "1" ]]; then
+    echo "cbox: Security configuration resolved:" >&2
+    echo "  Mode: $mode" >&2
+    echo "  Network: $final_network" >&2
+    echo "  SSH Agent: $final_ssh" >&2
+    echo "  Read-only: $final_read_only" >&2
+  fi
+}
+
+# Validate security configuration consistency
+validate_security_consistency() {
+  local mode="$1"
+  local network="$2"
+  local ssh="$3"
+  local read_only="$4"
+  
+  # Track if we have any security warnings
+  local has_warnings=0
+  
+  # Warn about downgrades from paranoid mode
+  if [[ "$mode" == "paranoid" ]]; then
+    # Bridge network is now expected for paranoid mode (required for Claude Code)
+    if [[ "$network" == "host" ]]; then
+      echo "cbox: ⚠️  Security Warning: Host network enabled in paranoid mode (expected: bridge, got: $network)" >&2
+      echo "  This reduces the network isolation benefits of paranoid mode" >&2
+      has_warnings=1
+    fi
+    
+    if [[ "$ssh" == "true" ]]; then
+      echo "cbox: ⚠️  Security Warning: SSH agent enabled in paranoid mode" >&2
+      echo "  This exposes SSH keys to the container, reducing security" >&2
+      has_warnings=1
+    fi
+    
+    if [[ "$read_only" != "true" ]]; then
+      echo "cbox: ⚠️  Security Warning: Write access enabled in paranoid mode" >&2
+      echo "  Container can modify your project files" >&2
+      has_warnings=1
+    fi
+  fi
+  
+  # Warn about dangerous combinations
+  if [[ "$network" == "host" && "$read_only" != "true" ]]; then
+    if [[ "$mode" != "standard" ]]; then
+      echo "cbox: ⚠️  Security Warning: Host network with write access" >&2
+      echo "  Container has full network access and can modify files" >&2
+      echo "  Consider using --read-only or restricted mode" >&2
+      has_warnings=1
+    fi
+  fi
+  
+  # Warn about SSH agent with no network (likely won't work)
+  if [[ "$ssh" == "true" && "$network" == "none" ]]; then
+    echo "cbox: ⚠️  Configuration Warning: SSH agent enabled but network disabled" >&2
+    echo "  SSH operations will fail without network access" >&2
+    echo "  Consider --ssh-agent false or enabling network" >&2
+    has_warnings=1
+  fi
+  
+  # Add a blank line after warnings for readability
+  if [[ "$has_warnings" == "1" ]]; then
+    echo "" >&2
+  fi
+  
+  # Critical security check - fail on obvious attack patterns
+  # Check for attempts to bypass security through environment manipulation
+  if [[ -n "${CBOX_BYPASS_SECURITY:-}" ]] || [[ -n "${BYPASS_SECURITY:-}" ]]; then
+    echo "cbox: 🛑 Security Error: Attempted security bypass detected" >&2
+    echo "  Security features cannot be disabled through environment variables" >&2
+    exit 1
+  fi
+}
+
 # Validate resource limits early
 if ! validate_resource_limits; then
   exit 1
@@ -90,6 +606,12 @@ SHELL_MODE=0
 VERIFY_MODE=0
 WORKDIR="$PWD"
 CLI_ENV_VARS=()
+
+# Security mode variables
+SECURITY_MODE="standard"
+NETWORK_TYPE=""
+SSH_AGENT_ENABLED=""
+READ_ONLY_MODE=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -122,6 +644,46 @@ while [[ $# -gt 0 ]]; do
       fi
       CLI_ENV_VARS+=("$2")
       shift 2
+      ;;
+    --security-mode)
+      if [[ $# -lt 2 ]]; then
+        echo "cbox: Option --security-mode requires an argument" >&2
+        echo "Usage: --security-mode MODE (standard|restricted|paranoid)" >&2
+        exit 1
+      fi
+      if ! validate_security_mode "$2"; then
+        exit 1
+      fi
+      SECURITY_MODE="$2"
+      shift 2
+      ;;
+    --network)
+      if [[ $# -lt 2 ]]; then
+        echo "cbox: Option --network requires an argument" >&2
+        echo "Usage: --network TYPE (host|bridge|none)" >&2
+        exit 1
+      fi
+      if ! validate_network_type "$2"; then
+        exit 1
+      fi
+      NETWORK_TYPE="$2"
+      shift 2
+      ;;
+    --ssh-agent)
+      if [[ $# -lt 2 ]]; then
+        echo "cbox: Option --ssh-agent requires an argument" >&2
+        echo "Usage: --ssh-agent BOOL (true|false)" >&2
+        exit 1
+      fi
+      if ! validate_boolean "$2" "--ssh-agent"; then
+        exit 1
+      fi
+      SSH_AGENT_ENABLED="$2"
+      shift 2
+      ;;
+    --read-only)
+      READ_ONLY_MODE=1
+      shift
       ;;
     --)
       shift
@@ -259,18 +821,38 @@ if [[ "$VERIFY_MODE" == "1" ]]; then
   exit 0
 fi
 
-# Check SSH agent for non-shell mode
-if [[ "$SHELL_MODE" == "0" ]]; then
+# Resolve security configuration after all arguments are parsed
+resolve_security_configuration "$SECURITY_MODE" "$NETWORK_TYPE" "$SSH_AGENT_ENABLED" "$READ_ONLY_MODE"
+
+# Initialize global arrays before GitHub authentication configuration
+vols=()
+ENV_VARS=()
+
+# Configure GitHub CLI authentication based on resolved security mode
+if ! configure_github_authentication "$SECURITY_MODE"; then
+  echo "cbox: Critical error - Failed to configure GitHub authentication" >&2
+  echo "  This may indicate a security issue or system configuration problem" >&2
+  if [[ "${CBOX_VERBOSE:-0}" == "1" ]]; then
+    echo "  Security mode: $SECURITY_MODE" >&2
+    echo "  Re-run with --verbose for detailed error information" >&2
+  fi
+  exit 1
+fi
+
+# Check SSH agent for non-shell mode (only if SSH agent is enabled)
+if [[ "$SHELL_MODE" == "0" && "$RESOLVED_SSH_AGENT" == "true" ]]; then
   if [[ -z "${SSH_AUTH_SOCK:-}" ]]; then
     echo "cbox: SSH agent not detected." >&2
     echo "  Start SSH agent: eval \$(ssh-agent -s)" >&2
     echo "  Add your key: ssh-add ~/.ssh/id_rsa" >&2
     echo "  Verify loaded: ssh-add -l" >&2
+    echo "  Or disable SSH agent: --ssh-agent false" >&2
     exit 1
   elif [[ ! -S "${SSH_AUTH_SOCK:-}" ]]; then
     echo "cbox: SSH agent socket not found at: ${SSH_AUTH_SOCK}" >&2
     echo "  The SSH_AUTH_SOCK variable points to a non-existent socket." >&2
     echo "  Try restarting your SSH agent: eval \$(ssh-agent -s)" >&2
+    echo "  Or disable SSH agent: --ssh-agent false" >&2
     exit 1
   fi
 fi
@@ -317,6 +899,12 @@ ENV CARGO_HOME=/opt/rust
 ENV PATH=/opt/rust/bin:$PATH
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path && \
     chmod -R 755 /opt/rust
+# Install GitHub CLI (gh)
+RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg && \
+    chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg && \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" > /etc/apt/sources.list.d/github-cli.list && \
+    apt-get update && apt-get install -y gh && \
+    rm -rf /var/lib/apt/lists/*
 # Install Hermit globally for all users
 RUN curl -fsSL https://github.com/cashapp/hermit/releases/latest/download/install.sh | HERMIT_USER_HOME=/opt/hermit bash && \
     ln -s /opt/hermit/bin/hermit /usr/local/bin/hermit && \
@@ -363,15 +951,28 @@ if [[ ! -f "$HOME/.claude.json" ]]; then
 fi
 
 # Volume mounts (only if sources exist)
-vols=(-v "$WORKDIR":/work
-      -v "$SSH_AUTH_SOCK":/ssh-agent
-      -v "$HOME/.claude":/home/host/.claude)
+# Apply read-only mode if configured
+if [[ "$RESOLVED_READ_ONLY" == "true" ]]; then
+  vols+=(-v "$WORKDIR":/work:ro)
+  echo "cbox: 🔒 Read-only mode enabled - project directory is write-protected" >&2
+else
+  vols+=(-v "$WORKDIR":/work)
+fi
+
+# Mount SSH agent socket only if enabled
+if [[ "$RESOLVED_SSH_AGENT" == "true" && -n "${SSH_AUTH_SOCK:-}" && -S "${SSH_AUTH_SOCK:-}" ]]; then
+  vols+=(-v "$SSH_AUTH_SOCK":/ssh-agent)
+fi
+
+# Always mount Claude config directory
+vols+=(-v "$HOME/.claude":/home/host/.claude)
 
 # Mount Claude config - needs to be writable for auth updates
 [[ -f "$HOME/.claude.json" ]] && vols+=(-v "$HOME/.claude.json":/home/host/.claude.json)
 [[ -f "$HOME/.gitconfig" ]] && vols+=(-v "$HOME/.gitconfig":/home/host/.gitconfig:ro)
 [[ -f "$HOME/.ssh/known_hosts" ]] && vols+=(-v "$HOME/.ssh/known_hosts":/home/host/.ssh/known_hosts:ro)
 [[ -f "$HOME/.git-credentials" ]] && vols+=(-v "$HOME/.git-credentials":/home/host/.git-credentials:ro)
+
 
 # Mount persistent Cargo cache directories to speed up Rust builds
 vols+=(-v "$CACHE_DIR/cargo-registry":/opt/rust/registry)
@@ -400,7 +1001,6 @@ if [ -t 0 ] && [ -t 1 ]; then
 fi
 
 # Collect explicitly specified environment variables from CLI flags
-ENV_VARS=()
 if [[ ${#CLI_ENV_VARS[@]} -gt 0 ]]; then
   for env_spec in "${CLI_ENV_VARS[@]}"; do
     if [[ "$env_spec" == *"="* ]]; then
@@ -419,6 +1019,7 @@ if [[ ${#CLI_ENV_VARS[@]} -gt 0 ]]; then
   done
 fi
 
+
 # Show what we're doing in verbose mode
 if [[ "${CBOX_VERBOSE:-0}" == "1" ]]; then
   echo "cbox: Running container with command: ${CONTAINER_CMD[*]}" >&2
@@ -426,8 +1027,36 @@ if [[ "${CBOX_VERBOSE:-0}" == "1" ]]; then
   echo "cbox: Volume mounts: ${#vols[@]} volumes" >&2
   if [[ ${#ENV_VARS[@]} -gt 0 ]]; then
     echo "cbox: Passing ${#ENV_VARS[@]} environment variables to container" >&2
+    # Debug: show what's in ENV_VARS (hide actual token values)
+    for ((i=0; i<${#ENV_VARS[@]}; i++)); do
+      if [[ "${ENV_VARS[$i]}" =~ ^GH_TOKEN= ]] || [[ "${ENV_VARS[$i]}" =~ ^GITHUB_TOKEN= ]]; then
+        echo "  ENV_VARS[$i]: ${ENV_VARS[$i]%%=*}=<redacted>" >&2
+      else
+        echo "  ENV_VARS[$i]: ${ENV_VARS[$i]}" >&2
+      fi
+    done
   fi
 fi
+
+# Configure network based on resolved security settings
+NETWORK_FLAGS=()
+case "$RESOLVED_NETWORK" in
+  host)
+    NETWORK_FLAGS+=("--network" "host")
+    ;;
+  bridge)
+    # Bridge network provides isolation while allowing outbound connections
+    NETWORK_FLAGS+=("--network" "bridge" "--dns" "8.8.8.8" "--dns" "1.1.1.1")
+    ;;
+  none)
+    NETWORK_FLAGS+=("--network" "none")
+    echo "cbox: 🔒 Network disabled - container has no network access" >&2
+    ;;
+  *)
+    echo "cbox: Internal error - invalid network type: $RESOLVED_NETWORK" >&2
+    exit 1
+    ;;
+esac
 
 # SECURITY HARDENING: Add Docker security capabilities and constraints
 exec docker run --rm ${TTY_FLAGS:+"${TTY_FLAGS[@]}"} \
@@ -447,10 +1076,11 @@ exec docker run --rm ${TTY_FLAGS:+"${TTY_FLAGS[@]}"} \
   --tmpfs /home/host/.cache:rw,noexec,nosuid,size=512m \
   --tmpfs /home/host/.npm:rw,noexec,nosuid,size=256m \
   --tmpfs /home/host/bin:rw,noexec,nosuid,size=64m \
+  ${NETWORK_FLAGS[@]} \
   -e HOME=/home/host \
   -e USER=host \
   -e TERM="${TERM:-xterm-256color}" \
-  -e SSH_AUTH_SOCK=/ssh-agent \
+  ${RESOLVED_SSH_AGENT:+"-e"} ${RESOLVED_SSH_AGENT:+"SSH_AUTH_SOCK=/ssh-agent"} \
   -e HOST_UID="$(id -u)" \
   -e HOST_GID="$(id -g)" \
   ${ENV_VARS:+"${ENV_VARS[@]}"} \

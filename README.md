@@ -1,6 +1,6 @@
 # cbox - Claude Code Sandbox
 
-[![Version](https://img.shields.io/badge/version-1.2.1-blue.svg)](https://github.com/bradleydwyer/cbox/releases)
+[![Version](https://img.shields.io/badge/version-1.3.0-blue.svg)](https://github.com/bradleydwyer/cbox/releases)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Docker](https://img.shields.io/badge/docker-%3E%3D20.10-blue.svg)](https://www.docker.com/)
 [![Platform](https://img.shields.io/badge/platform-linux%20%7C%20macos%20%7C%20wsl-lightgrey.svg)](README.md#system-requirements)
@@ -34,11 +34,14 @@ A simple Docker-based sandbox for running Claude Code with full network access a
 - Proper file ownership (no root-owned files)
 - Git configuration and SSH known hosts
 
+**Why use cbox?** The primary use case is to safely run Claude Code in "bypass mode" (where Claude can execute commands without approval) while maintaining security boundaries. This gives you the productivity benefits of autonomous Claude operation with the safety of containerization - protecting your host system from unintended changes while still allowing productive work on your projects.
+
 ## System Requirements
 
 - **Docker**: Docker Desktop 20.10+ or Docker Engine with BuildKit support
-- **Operating System**: macOS, Linux, or WSL2 on Windows
-- **Shell**: Bash 4.0+ or Zsh
+- **Operating System**: macOS (primary), Linux, or WSL2 on Windows
+  - **Note**: This project has been primarily developed and tested on macOS. Linux compatibility is expected but may require minor adjustments.
+- **Shell**: Bash 4.0+ or Zsh (Bash 3.2+ supported with compatibility fixes)
 - **SSH Agent**: Active SSH agent with GitHub key loaded
 - **Claude Code CLI**: Installed on host (optional but recommended for authentication)
 - **Memory**: At least 4GB RAM available for Docker
@@ -52,6 +55,62 @@ A simple Docker-based sandbox for running Claude Code with full network access a
   eval $(ssh-agent -s)
   ssh-add ~/.ssh/id_rsa  # or your key path
   ```
+
+### GitHub CLI Authentication (Optional)
+
+cbox provides seamless GitHub authentication with automatic token forwarding:
+
+#### Automatic Authentication Methods
+
+1. **Environment Variables**: `GH_TOKEN` or `GITHUB_TOKEN` are automatically detected and forwarded
+2. **GitHub CLI Config**: Your `~/.config/gh` directory is mounted for full `gh` CLI access
+3. **macOS Keychain Integration**: Automatically extracts tokens from `gh` CLI when using keychain authentication
+   - No manual token export needed for macOS users
+   - Secure extraction prevents token exposure in process lists
+   - Works with GitHub's recommended keychain storage
+
+#### Security Modes & GitHub Access
+
+- **`standard`/`restricted` modes**: Full GitHub authentication (tokens and config forwarded)
+- **`paranoid` mode**: No GitHub authentication (maximum security isolation)
+
+#### How It Works
+
+When you run cbox, it automatically:
+1. Checks for `GH_TOKEN` or `GITHUB_TOKEN` environment variables
+2. If not found but `gh` CLI is authenticated, securely extracts the token
+3. Mounts your GitHub CLI config directory (`~/.config/gh`)
+4. Sets up proper environment variables in the container
+5. Validates token format and logs success (with SHA256 hash for security)
+
+No additional setup needed - if GitHub CLI works on your host, it works in cbox!
+
+#### Example Usage
+
+```bash
+# Create a pull request from within cbox
+cbox ~/my-project
+gh pr create --title "New feature" --body "Description"
+
+# Check GitHub authentication status
+cbox --shell
+gh auth status
+
+# List repository issues
+cbox ~/my-project -- gh issue list
+
+# Create a new release
+cbox ~/my-project -- gh release create v1.0.0 --notes "First release"
+```
+
+#### Required Token Permissions
+
+For GitHub CLI to work properly, your token needs these scopes:
+- `repo` - Full repository access
+- `read:org` - Read organization data  
+- `workflow` - Update GitHub Actions workflows (if needed)
+
+Create a token at: https://github.com/settings/tokens/new
 
 ## Installation
 
@@ -102,6 +161,29 @@ cbox --help               # Show help information
 cbox --version            # Display version
 cbox --verbose            # Run with debug output
 cbox --verify             # Verify installation
+```
+
+### Security Options (New in v1.3.0)
+
+**Default Configuration:** Standard mode with host network access (backward compatible with v1.2.1)
+
+```bash
+# Security modes for different trust levels
+cbox --security-mode standard     # Full access (default - same as v1.2.1)
+cbox --security-mode restricted   # Bridge network, SSH agent, read/write
+cbox --security-mode paranoid     # No network, no SSH, read-only
+
+# Override individual security settings
+cbox --network host               # Host network (default)
+cbox --network bridge            # Isolated bridge network  
+cbox --network none              # No network access
+cbox --ssh-agent true            # Enable SSH agent (default)
+cbox --ssh-agent false           # Disable SSH agent
+cbox --read-only                 # Force read-only project directory
+
+# Security combinations
+cbox --security-mode paranoid ~/untrusted-code    # Maximum security
+cbox --network bridge --read-only ~/analysis      # Isolated analysis
 ```
 
 ### Basic usage
@@ -177,7 +259,7 @@ docker run -it --entrypoint /bin/bash cbox:latest
 | `XDG_CONFIG_HOME` | Override config directory location | ~/.config |
 | `XDG_DATA_HOME` | Override data directory location | ~/.local/share |
 | `TERM` | Terminal type passed to container | xterm-256color |
-| `SSH_AUTH_SOCK` | SSH agent socket path | (required) |
+| `SSH_AUTH_SOCK` | SSH agent socket path | (required when --ssh-agent true, default for standard/restricted modes) |
 
 ### Passing Environment Variables (New in v1.2.0)
 
@@ -226,6 +308,21 @@ SSH Agent        ─────socket───>  /ssh-agent
 > 
 > This section documents ALL resources shared between your host system and the Docker container.
 > Understanding these shared resources is essential for security awareness.
+> 
+> **Note:** Resource access varies by security mode. See the mode-specific notes below.
+
+### Security Mode Impact on Shared Resources
+
+The security mode you choose significantly affects what resources are shared:
+
+| Resource Type | Standard Mode | Restricted Mode | Paranoid Mode |
+|--------------|---------------|-----------------|---------------|
+| **Network** | Full host network | Isolated bridge | Isolated bridge |
+| **SSH Agent** | ✅ Forwarded | ✅ Forwarded | ❌ Blocked |
+| **Project Directory** | Read/Write | Read/Write | Read-Only |
+| **GitHub Tokens** | ✅ Forwarded | ✅ Forwarded | ❌ Blocked |
+| **GitHub Config** | ✅ Mounted | ✅ Mounted | ❌ Not mounted |
+| **Claude Config** | ✅ Full access | ✅ Full access | ✅ Full access |
 
 ### 1. Persistent Volume Mounts (Host Files/Directories)
 
@@ -233,13 +330,14 @@ These directories and files from your host system are directly accessible to the
 
 | Host Path | Container Path | Access | Purpose | Security Impact |
 |-----------|---------------|--------|---------|-----------------|
-| **Your working directory** | `/work` | **Read/Write** | Project files you're working on | ⚠️ **FULL ACCESS**: Container can read, modify, or delete ANY file in this directory |
-| `$SSH_AUTH_SOCK` (socket) | `/ssh-agent` | **Read/Write** | SSH agent forwarding | ⚠️ Container can use your SSH keys for Git operations (keys stay on host) |
-| `~/.claude/` | `/home/host/.claude` | **Read/Write** | Claude agents and settings | ⚠️ Container can access all your custom Claude agents |
-| `~/.claude.json` | `/home/host/.claude.json` | **Read/Write** | Claude authentication | 🔴 **CRITICAL**: Contains your Claude API authentication token |
-| `~/.gitconfig` | `/home/host/.gitconfig` | **Read-Only** | Git configuration | Container can see your Git username, email, and settings |
-| `~/.ssh/known_hosts` | `/home/host/.ssh/known_hosts` | **Read-Only** | SSH known hosts | Container can see which SSH servers you've connected to |
-| `~/.git-credentials` (if exists) | `/home/host/.git-credentials` | **Read-Only** | Git credentials helper | ⚠️ May contain stored Git authentication tokens |
+| **Your working directory** | `/work` | **Read/Write** (Read-Only in paranoid) | Project files you're working on | ⚠️ **FULL ACCESS** (standard/restricted): Container can read, modify, or delete ANY file in this directory. **Read-only** in paranoid mode. |
+| `$SSH_AUTH_SOCK` (socket) | `/ssh-agent` | **Read/Write** | SSH agent forwarding | ⚠️ Container can use your SSH keys for Git operations (keys stay on host). **Not mounted in paranoid mode.** |
+| `~/.claude/` | `/home/host/.claude` | **Read/Write** | Claude agents and settings | ⚠️ Container can access all your custom Claude agents (all modes) |
+| `~/.claude.json` | `/home/host/.claude.json` | **Read/Write** | Claude authentication | 🔴 **CRITICAL**: Contains your Claude API authentication token (all modes) |
+| `~/.gitconfig` | `/home/host/.gitconfig` | **Read-Only** | Git configuration | Container can see your Git username, email, and settings (all modes) |
+| `~/.config/gh` (if exists) | `/home/host/.config/gh` | **Read-Only** | GitHub CLI config | GitHub CLI authentication and settings. **Not mounted in paranoid mode.** |
+| `~/.ssh/known_hosts` | `/home/host/.ssh/known_hosts` | **Read-Only** | SSH known hosts | Container can see which SSH servers you've connected to (all modes) |
+| `~/.git-credentials` (if exists) | `/home/host/.git-credentials` | **Read-Only** | Git credentials helper | ⚠️ May contain stored Git authentication tokens (all modes) |
 
 **Security Warning**: The container has FULL read/write access to your working directory and Claude configuration. Only use cbox with trusted projects.
 
@@ -290,7 +388,7 @@ The container runs with specific security constraints:
 
 #### Additional Security Settings
 - `--security-opt=no-new-privileges`: Prevents privilege escalation
-- `--memory 2g`: Limits container to 2GB RAM (configurable)
+- `--memory 4g`: Limits container to 4GB RAM (configurable)
 - `--cpus 2`: Limits container to 2 CPU cores (configurable)
 
 ### 5. Network Access
@@ -310,7 +408,7 @@ For security, these are explicitly NOT shared with the container:
 - Other user home directories
 - Host system packages and binaries
 - Docker socket (container cannot control Docker)
-- Host network namespace (uses bridge network)
+- Host Docker daemon (container cannot control Docker)
 
 ### 7. Data Persistence
 
@@ -339,11 +437,12 @@ cbox automatically uses your host Claude authentication:
 
 ## Network Configuration
 
-- **Full network access**: Container runs with default Docker bridge network
+- **Default network access**: Container runs with **host network** (same as v1.2.1)
 - **Internet connectivity**: Can make outbound connections to any host
-- **Host access**: Can reach host services via `host.docker.internal`
-- **SSH forwarding**: Uses forwarded agent from host for Git operations
+- **Host access**: Direct access to host services and network interfaces
+- **SSH forwarding**: Uses forwarded agent from host for Git operations (when enabled)
 - **No egress filtering**: No firewall restrictions on outbound connections
+- **Security modes**: Bridge and none network options available for isolation
 
 ## File Permissions
 
@@ -531,7 +630,7 @@ Note: The `.cbox.json.example` file shows the planned configuration format, but 
 - [CHANGELOG.md](CHANGELOG.md) - Version history and release notes
 - [CONTRIBUTING.md](CONTRIBUTING.md) - Contribution guidelines
 - [SECURITY.md](SECURITY.md) - Security features and best practices
-- [SECRET_SCANNING.md](SECRET_SCANNING.md) - Git pre-commit hooks and secret scanning setup
+- [SECRET_SCANNING.md](docs/SECRET_SCANNING.md) - Git pre-commit hooks and secret scanning setup
 
 ## License
 
