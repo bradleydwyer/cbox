@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.6] - 2025-08-10
+
+### Changed
+- Removed Docker image build prompt from install script
+- Docker image now builds automatically on first cbox run
+- Simplified installation process with cleaner completion message
+
+### Removed
+- Interactive Docker build prompt and associated build_docker_image function
+
 ## [1.1.5] - 2025-08-10
 
 ### Fixed
@@ -131,7 +141,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for multiple concurrent instances
 - Easy cleanup and uninstallation
 
-[Unreleased]: https://github.com/bradleydwyer/cbox/compare/v1.1.5...HEAD
+[Unreleased]: https://github.com/bradleydwyer/cbox/compare/v1.1.6...HEAD
+[1.1.6]: https://github.com/bradleydwyer/cbox/compare/v1.1.5...v1.1.6
 [1.1.5]: https://github.com/bradleydwyer/cbox/compare/v1.1.4...v1.1.5
 [1.1.4]: https://github.com/bradleydwyer/cbox/compare/v1.1.3...v1.1.4
 [1.1.3]: https://github.com/bradleydwyer/cbox/compare/v1.1.2...v1.1.3

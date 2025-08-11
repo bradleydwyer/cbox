@@ -2,7 +2,7 @@
 # cbox installation script - updated for CDN cache bust
 set -euo pipefail
 
-VERSION="1.1.5"
+VERSION="1.1.6"
 INSTALL_DIR="/usr/local/bin"
 REPO_URL="https://raw.githubusercontent.com/bradleydwyer/cbox/main"
 
@@ -316,17 +316,6 @@ setup_shell() {
   fi
 }
 
-# Build Docker image
-build_docker_image() {
-  info "Building Docker image (this may take a minute on first run)..."
-  
-  if CBOX_REBUILD=1 cbox --verify &> /dev/null; then
-    info "Docker image built successfully"
-  else
-    warn "Could not verify Docker image build"
-    echo "You can build it manually later by running: CBOX_REBUILD=1 cbox"
-  fi
-}
 
 # Main installation flow
 main() {
@@ -365,15 +354,7 @@ main() {
     echo "  cbox                 # Run in current directory"
     echo "  cbox ~/my-project    # Run in specific directory"
     echo ""
-    
-    # Try to build Docker image
-    echo "Would you like to build the Docker image now? (y/n)"
-    read -r response
-    if [[ "$response" =~ ^[Yy]$ ]]; then
-      build_docker_image
-    else
-      echo "You can build it later by running: CBOX_REBUILD=1 cbox"
-    fi
+    echo "Note: Docker image will be built automatically on first run."
   else
     error "Installation verification failed"
     echo "Please check the error messages above and try again."
