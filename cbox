@@ -33,6 +33,12 @@ Options:
   -e VAR           Pass environment variable to container
   -e VAR=value     Pass environment variable with specific value
 
+Security Options:
+  --security-mode MODE    Set security mode: standard|restricted|paranoid (default: standard)
+  --network TYPE          Override network type: host|bridge|none (overrides mode default)  
+  --ssh-agent BOOL        Override SSH agent setting: true|false (overrides mode default)
+  --read-only             Force read-only project directory mount
+
 Environment Variables:
   CBOX_REBUILD=1   Force rebuild Docker image
   CBOX_VERBOSE=1   Enable verbose debug output
@@ -54,12 +60,66 @@ Examples:
   cbox -e AWS_PROFILE -e AWS_REGION       # Pass AWS environment variables
   cbox -e "ANTHROPIC_MODEL=claude-opus-4-1" # Set specific model
   CBOX_MEMORY=4g cbox                     # Run with 4GB memory limit
+  cbox --security-mode restricted         # Run with restricted security mode
+  cbox --network none --ssh-agent false   # Override network and SSH agent settings
+  cbox --read-only --security-mode paranoid # Force read-only with paranoid security
 
 For more information, see: https://github.com/bradleydwyer/cbox
 EOF
 }
 
 # --- Validation Functions ---
+
+# Validate security mode argument
+validate_security_mode() {
+  local mode="$1"
+  
+  # Only allow specific security modes to prevent injection
+  case "$mode" in
+    standard|restricted|paranoid)
+      return 0
+      ;;
+    *)
+      echo "cbox: Invalid security mode: $mode" >&2
+      echo "  Valid modes: standard, restricted, paranoid" >&2
+      return 1
+      ;;
+  esac
+}
+
+# Validate network type argument  
+validate_network_type() {
+  local network="$1"
+  
+  # Only allow specific network types to prevent injection
+  case "$network" in
+    host|bridge|none)
+      return 0
+      ;;
+    *)
+      echo "cbox: Invalid network type: $network" >&2
+      echo "  Valid types: host, bridge, none" >&2
+      return 1
+      ;;
+  esac
+}
+
+# Validate boolean argument (for SSH agent)
+validate_boolean() {
+  local value="$1"
+  local arg_name="$2"
+  
+  case "$value" in
+    true|false)
+      return 0
+      ;;
+    *)
+      echo "cbox: Invalid boolean value for $arg_name: $value" >&2
+      echo "  Valid values: true, false" >&2
+      return 1
+      ;;
+  esac
+}
 
 # Validate resource limits
 validate_resource_limits() {
@@ -80,6 +140,132 @@ validate_resource_limits() {
   return 0
 }
 
+# --- Security Configuration Resolution Function ---
+
+# Resolve final security configuration based on mode and overrides
+resolve_security_configuration() {
+  local mode="$1"
+  local network_override="$2"
+  local ssh_override="$3"
+  local read_only_override="$4"
+  
+  # Initialize with mode defaults
+  local final_network=""
+  local final_ssh=""
+  local final_read_only=""
+  
+  # Apply security mode defaults
+  case "$mode" in
+    standard)
+      # Default behavior - full network, SSH agent, writable
+      final_network="host"
+      final_ssh="true"
+      final_read_only="false"
+      ;;
+    restricted)
+      # Balanced security - isolated network, SSH agent, writable
+      final_network="bridge"
+      final_ssh="true"
+      final_read_only="false"
+      ;;
+    paranoid)
+      # Maximum security - no network, no SSH, read-only
+      final_network="none"
+      final_ssh="false"
+      final_read_only="true"
+      ;;
+    *)
+      echo "cbox: Internal error - invalid security mode: $mode" >&2
+      exit 1
+      ;;
+  esac
+  
+  # Apply explicit overrides (if provided)
+  [[ -n "$network_override" ]] && final_network="$network_override"
+  [[ -n "$ssh_override" ]] && final_ssh="$ssh_override"
+  [[ "$read_only_override" == "1" ]] && final_read_only="true"
+  
+  # Security validation and warnings
+  validate_security_consistency "$mode" "$final_network" "$final_ssh" "$final_read_only"
+  
+  # Export resolved configuration
+  RESOLVED_NETWORK="$final_network"
+  RESOLVED_SSH_AGENT="$final_ssh"
+  RESOLVED_READ_ONLY="$final_read_only"
+  
+  # Log configuration in verbose mode
+  if [[ "${CBOX_VERBOSE:-0}" == "1" ]]; then
+    echo "cbox: Security configuration resolved:" >&2
+    echo "  Mode: $mode" >&2
+    echo "  Network: $final_network" >&2
+    echo "  SSH Agent: $final_ssh" >&2
+    echo "  Read-only: $final_read_only" >&2
+  fi
+}
+
+# Validate security configuration consistency
+validate_security_consistency() {
+  local mode="$1"
+  local network="$2"
+  local ssh="$3"
+  local read_only="$4"
+  
+  # Track if we have any security warnings
+  local has_warnings=0
+  
+  # Warn about downgrades from paranoid mode
+  if [[ "$mode" == "paranoid" ]]; then
+    if [[ "$network" != "none" ]]; then
+      echo "cbox: ⚠️  Security Warning: Network enabled in paranoid mode (expected: none, got: $network)" >&2
+      echo "  This reduces the isolation benefits of paranoid mode" >&2
+      has_warnings=1
+    fi
+    
+    if [[ "$ssh" == "true" ]]; then
+      echo "cbox: ⚠️  Security Warning: SSH agent enabled in paranoid mode" >&2
+      echo "  This exposes SSH keys to the container, reducing security" >&2
+      has_warnings=1
+    fi
+    
+    if [[ "$read_only" != "true" ]]; then
+      echo "cbox: ⚠️  Security Warning: Write access enabled in paranoid mode" >&2
+      echo "  Container can modify your project files" >&2
+      has_warnings=1
+    fi
+  fi
+  
+  # Warn about dangerous combinations
+  if [[ "$network" == "host" && "$read_only" != "true" ]]; then
+    if [[ "$mode" != "standard" ]]; then
+      echo "cbox: ⚠️  Security Warning: Host network with write access" >&2
+      echo "  Container has full network access and can modify files" >&2
+      echo "  Consider using --read-only or restricted mode" >&2
+      has_warnings=1
+    fi
+  fi
+  
+  # Warn about SSH agent with no network (likely won't work)
+  if [[ "$ssh" == "true" && "$network" == "none" ]]; then
+    echo "cbox: ⚠️  Configuration Warning: SSH agent enabled but network disabled" >&2
+    echo "  SSH operations will fail without network access" >&2
+    echo "  Consider --ssh-agent false or enabling network" >&2
+    has_warnings=1
+  fi
+  
+  # Add a blank line after warnings for readability
+  if [[ "$has_warnings" == "1" ]]; then
+    echo "" >&2
+  fi
+  
+  # Critical security check - fail on obvious attack patterns
+  # Check for attempts to bypass security through environment manipulation
+  if [[ -n "${CBOX_BYPASS_SECURITY:-}" ]] || [[ -n "${BYPASS_SECURITY:-}" ]]; then
+    echo "cbox: 🛑 Security Error: Attempted security bypass detected" >&2
+    echo "  Security features cannot be disabled through environment variables" >&2
+    exit 1
+  fi
+}
+
 # Validate resource limits early
 if ! validate_resource_limits; then
   exit 1
@@ -90,6 +276,12 @@ SHELL_MODE=0
 VERIFY_MODE=0
 WORKDIR="$PWD"
 CLI_ENV_VARS=()
+
+# Security mode variables
+SECURITY_MODE="standard"
+NETWORK_TYPE=""
+SSH_AGENT_ENABLED=""
+READ_ONLY_MODE=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -122,6 +314,46 @@ while [[ $# -gt 0 ]]; do
       fi
       CLI_ENV_VARS+=("$2")
       shift 2
+      ;;
+    --security-mode)
+      if [[ $# -lt 2 ]]; then
+        echo "cbox: Option --security-mode requires an argument" >&2
+        echo "Usage: --security-mode MODE (standard|restricted|paranoid)" >&2
+        exit 1
+      fi
+      if ! validate_security_mode "$2"; then
+        exit 1
+      fi
+      SECURITY_MODE="$2"
+      shift 2
+      ;;
+    --network)
+      if [[ $# -lt 2 ]]; then
+        echo "cbox: Option --network requires an argument" >&2
+        echo "Usage: --network TYPE (host|bridge|none)" >&2
+        exit 1
+      fi
+      if ! validate_network_type "$2"; then
+        exit 1
+      fi
+      NETWORK_TYPE="$2"
+      shift 2
+      ;;
+    --ssh-agent)
+      if [[ $# -lt 2 ]]; then
+        echo "cbox: Option --ssh-agent requires an argument" >&2
+        echo "Usage: --ssh-agent BOOL (true|false)" >&2
+        exit 1
+      fi
+      if ! validate_boolean "$2" "--ssh-agent"; then
+        exit 1
+      fi
+      SSH_AGENT_ENABLED="$2"
+      shift 2
+      ;;
+    --read-only)
+      READ_ONLY_MODE=1
+      shift
       ;;
     --)
       shift
@@ -259,21 +491,26 @@ if [[ "$VERIFY_MODE" == "1" ]]; then
   exit 0
 fi
 
-# Check SSH agent for non-shell mode
-if [[ "$SHELL_MODE" == "0" ]]; then
+# Check SSH agent for non-shell mode (only if SSH agent is enabled)
+if [[ "$SHELL_MODE" == "0" && "$RESOLVED_SSH_AGENT" == "true" ]]; then
   if [[ -z "${SSH_AUTH_SOCK:-}" ]]; then
     echo "cbox: SSH agent not detected." >&2
     echo "  Start SSH agent: eval \$(ssh-agent -s)" >&2
     echo "  Add your key: ssh-add ~/.ssh/id_rsa" >&2
     echo "  Verify loaded: ssh-add -l" >&2
+    echo "  Or disable SSH agent: --ssh-agent false" >&2
     exit 1
   elif [[ ! -S "${SSH_AUTH_SOCK:-}" ]]; then
     echo "cbox: SSH agent socket not found at: ${SSH_AUTH_SOCK}" >&2
     echo "  The SSH_AUTH_SOCK variable points to a non-existent socket." >&2
     echo "  Try restarting your SSH agent: eval \$(ssh-agent -s)" >&2
+    echo "  Or disable SSH agent: --ssh-agent false" >&2
     exit 1
   fi
 fi
+
+# Resolve security configuration after all arguments are parsed
+resolve_security_configuration "$SECURITY_MODE" "$NETWORK_TYPE" "$SSH_AGENT_ENABLED" "$READ_ONLY_MODE"
 
 # Validate working directory
 if [[ ! -d "$WORKDIR" ]]; then
@@ -363,9 +600,21 @@ if [[ ! -f "$HOME/.claude.json" ]]; then
 fi
 
 # Volume mounts (only if sources exist)
-vols=(-v "$WORKDIR":/work
-      -v "$SSH_AUTH_SOCK":/ssh-agent
-      -v "$HOME/.claude":/home/host/.claude)
+# Apply read-only mode if configured
+if [[ "$RESOLVED_READ_ONLY" == "true" ]]; then
+  vols=(-v "$WORKDIR":/work:ro)
+  echo "cbox: 🔒 Read-only mode enabled - project directory is write-protected" >&2
+else
+  vols=(-v "$WORKDIR":/work)
+fi
+
+# Mount SSH agent socket only if enabled
+if [[ "$RESOLVED_SSH_AGENT" == "true" && -n "${SSH_AUTH_SOCK:-}" && -S "${SSH_AUTH_SOCK:-}" ]]; then
+  vols+=(-v "$SSH_AUTH_SOCK":/ssh-agent)
+fi
+
+# Always mount Claude config directory
+vols+=(-v "$HOME/.claude":/home/host/.claude)
 
 # Mount Claude config - needs to be writable for auth updates
 [[ -f "$HOME/.claude.json" ]] && vols+=(-v "$HOME/.claude.json":/home/host/.claude.json)
@@ -429,6 +678,26 @@ if [[ "${CBOX_VERBOSE:-0}" == "1" ]]; then
   fi
 fi
 
+# Configure network based on resolved security settings
+NETWORK_FLAGS=()
+case "$RESOLVED_NETWORK" in
+  host)
+    NETWORK_FLAGS+=("--network" "host")
+    ;;
+  bridge)
+    # Bridge network provides isolation while allowing outbound connections
+    NETWORK_FLAGS+=("--network" "bridge" "--dns" "8.8.8.8" "--dns" "1.1.1.1")
+    ;;
+  none)
+    NETWORK_FLAGS+=("--network" "none")
+    echo "cbox: 🔒 Network disabled - container has no network access" >&2
+    ;;
+  *)
+    echo "cbox: Internal error - invalid network type: $RESOLVED_NETWORK" >&2
+    exit 1
+    ;;
+esac
+
 # SECURITY HARDENING: Add Docker security capabilities and constraints
 exec docker run --rm ${TTY_FLAGS:+"${TTY_FLAGS[@]}"} \
   --memory "$MEMORY_LIMIT" \
@@ -447,10 +716,11 @@ exec docker run --rm ${TTY_FLAGS:+"${TTY_FLAGS[@]}"} \
   --tmpfs /home/host/.cache:rw,noexec,nosuid,size=512m \
   --tmpfs /home/host/.npm:rw,noexec,nosuid,size=256m \
   --tmpfs /home/host/bin:rw,noexec,nosuid,size=64m \
+  ${NETWORK_FLAGS[@]} \
   -e HOME=/home/host \
   -e USER=host \
   -e TERM="${TERM:-xterm-256color}" \
-  -e SSH_AUTH_SOCK=/ssh-agent \
+  ${RESOLVED_SSH_AGENT:+"-e"} ${RESOLVED_SSH_AGENT:+"SSH_AUTH_SOCK=/ssh-agent"} \
   -e HOST_UID="$(id -u)" \
   -e HOST_GID="$(id -g)" \
   ${ENV_VARS:+"${ENV_VARS[@]}"} \
