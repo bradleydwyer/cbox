@@ -202,6 +202,7 @@ cbox automatically mounts the following volumes:
 - procps (process utilities)
 - gosu (user switching)
 - @anthropic-ai/claude-code (latest)
+- gh (GitHub CLI)
 - hermit (package manager)
 
 ### Resource Limits

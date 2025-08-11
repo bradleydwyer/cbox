@@ -46,6 +46,7 @@ Environment Variables:
   CBOX_CPUS=4      Set container CPU limit (default: 2)
 
 Features:
+  • GitHub CLI (gh) for pull requests, issues, and repository management
   • Rust/Cargo support with persistent dependency cache
   • Cargo registry cached in ~/.cache/cbox/cargo-registry
   • Cargo git deps cached in ~/.cache/cbox/cargo-git
@@ -554,6 +555,12 @@ ENV CARGO_HOME=/opt/rust
 ENV PATH=/opt/rust/bin:$PATH
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path && \
     chmod -R 755 /opt/rust
+# Install GitHub CLI (gh)
+RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg && \
+    chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg && \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" > /etc/apt/sources.list.d/github-cli.list && \
+    apt-get update && apt-get install -y gh && \
+    rm -rf /var/lib/apt/lists/*
 # Install Hermit globally for all users
 RUN curl -fsSL https://github.com/cashapp/hermit/releases/latest/download/install.sh | HERMIT_USER_HOME=/opt/hermit bash && \
     ln -s /opt/hermit/bin/hermit /usr/local/bin/hermit && \

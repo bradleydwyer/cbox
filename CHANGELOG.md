@@ -31,6 +31,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Updated help text with security options and examples
   - Security quick reference guide for common scenarios
   - Comprehensive technical design documentation
+- **GitHub CLI Integration**: Added `gh` command-line tool to Docker image
+  - Enables pull request creation, issue management, and repository operations
+  - Supports GitHub workflow automation from within cbox
+  - Pre-installed and ready to use with host GitHub authentication
 
 ### Security
 - Enhanced container security with granular network and access controls
