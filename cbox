@@ -757,14 +757,14 @@ while [[ $# -gt 0 ]]; do
           echo "Updating cbox..."
           
           # Store current version for comparison
-          local old_version="$VERSION"
+          old_version="$VERSION"
           
           # Perform git pull
           if git pull origin main; then
             echo "✅ Successfully updated cbox repository"
             
             # Check if version changed
-            local new_version=$(grep '^VERSION=' "$0" | head -1 | cut -d'"' -f2)
+            new_version=$(grep '^VERSION=' "$0" | head -1 | cut -d'"' -f2)
             if [[ "$old_version" != "$new_version" ]]; then
               echo "Updated from v$old_version to v$new_version"
             fi
@@ -793,8 +793,8 @@ while [[ $# -gt 0 ]]; do
           echo "Downloading latest cbox..."
           
           # Create temp file for new version
-          local temp_file=$(mktemp)
-          local install_script=$(mktemp)
+          temp_file=$(mktemp)
+          install_script=$(mktemp)
           
           # Download install script
           if curl -fsSL https://raw.githubusercontent.com/bradleydwyer/cbox/main/install.sh -o "$install_script"; then
