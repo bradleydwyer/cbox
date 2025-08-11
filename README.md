@@ -486,16 +486,71 @@ Each shared resource serves a specific purpose:
 
 If you're uncomfortable with any of these shared resources, **do not use cbox**.
 
-## Maintenance
+## Auto-Update System (v1.4.0+)
 
-### Updating cbox
+cbox includes an intelligent auto-update system that handles both cbox updates and Claude Code updates:
+
+### Claude Code Auto-Updates
+
+Claude Code can now update itself within containers without rebuilding Docker images:
+
+- **Automatic**: Claude Code updates itself when new versions are available
+- **Persistent**: Updates are saved to `~/.cache/cbox/npm-user` and persist across runs
+- **Fast**: After first installation (~30 seconds), subsequent runs are instant
+- **Zero maintenance**: No more rebuilding Docker images for Claude Code updates
+
+### cbox Update Notifications
+
+cbox checks for updates daily and notifies you when new versions are available:
 
 ```bash
-# Pull latest version
+# Check for updates immediately
+cbox --update-check
+
+# Show update instructions
+cbox --update
+
+# Skip update notifications for 7 days
+cbox --update-skip
+
+# Disable update checks completely
+export CBOX_NO_UPDATE_CHECK=1
+```
+
+**Update behavior**:
+- Checks run once per day (24-hour cache)
+- Non-intrusive: Shows a simple notification, doesn't block work
+- Security-aware: Disabled in paranoid mode
+- Respects your preferences: Can be disabled entirely
+- Uses GitHub API with fallbacks to curl, wget, or python
+
+### How Updates Work
+
+1. **Claude Code Updates**: 
+   - First run installs Claude Code to a persistent user directory
+   - Claude Code checks for updates on each startup
+   - Updates are applied automatically without user intervention
+   - No Docker rebuild needed
+
+2. **cbox Updates**:
+   - Daily check via GitHub Releases API
+   - Shows notification when new version available
+   - User chooses when to update using provided commands
+   - Updates require running install script or git pull
+
+## Maintenance
+
+### Manual cbox Updates
+
+```bash
+# Pull latest version (if cloned)
 git pull origin main
 
 # Or re-run installation script
 curl -fsSL https://raw.githubusercontent.com/bradleydwyer/cbox/main/install.sh | bash
+
+# Or use the update helper
+cbox --update  # Shows update instructions
 ```
 
 ### Updating Claude Code CLI
