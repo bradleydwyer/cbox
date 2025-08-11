@@ -6,6 +6,8 @@ VERSION="1.1.3"
 INSTALL_DIR="/usr/local/bin"
 REPO_URL="https://raw.githubusercontent.com/bradleydwyer/cbox/main"
 
+# Force CDN refresh - $(date)
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
