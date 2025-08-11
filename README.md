@@ -288,6 +288,21 @@ SSH Agent        ─────socket───>  /ssh-agent
 > 
 > This section documents ALL resources shared between your host system and the Docker container.
 > Understanding these shared resources is essential for security awareness.
+> 
+> **Note:** Resource access varies by security mode. See the mode-specific notes below.
+
+### Security Mode Impact on Shared Resources
+
+The security mode you choose significantly affects what resources are shared:
+
+| Resource Type | Standard Mode | Restricted Mode | Paranoid Mode |
+|--------------|---------------|-----------------|---------------|
+| **Network** | Full host network | Isolated bridge | No network access |
+| **SSH Agent** | ✅ Forwarded | ✅ Forwarded | ❌ Blocked |
+| **Project Directory** | Read/Write | Read/Write | Read-Only |
+| **GitHub Tokens** | ✅ Forwarded | ✅ Forwarded | ❌ Blocked |
+| **GitHub Config** | ✅ Mounted | ✅ Mounted | ❌ Not mounted |
+| **Claude Config** | ✅ Full access | ✅ Full access | ✅ Full access |
 
 ### 1. Persistent Volume Mounts (Host Files/Directories)
 
@@ -295,13 +310,14 @@ These directories and files from your host system are directly accessible to the
 
 | Host Path | Container Path | Access | Purpose | Security Impact |
 |-----------|---------------|--------|---------|-----------------|
-| **Your working directory** | `/work` | **Read/Write** | Project files you're working on | ⚠️ **FULL ACCESS**: Container can read, modify, or delete ANY file in this directory |
-| `$SSH_AUTH_SOCK` (socket) | `/ssh-agent` | **Read/Write** | SSH agent forwarding | ⚠️ Container can use your SSH keys for Git operations (keys stay on host) |
-| `~/.claude/` | `/home/host/.claude` | **Read/Write** | Claude agents and settings | ⚠️ Container can access all your custom Claude agents |
-| `~/.claude.json` | `/home/host/.claude.json` | **Read/Write** | Claude authentication | 🔴 **CRITICAL**: Contains your Claude API authentication token |
-| `~/.gitconfig` | `/home/host/.gitconfig` | **Read-Only** | Git configuration | Container can see your Git username, email, and settings |
-| `~/.ssh/known_hosts` | `/home/host/.ssh/known_hosts` | **Read-Only** | SSH known hosts | Container can see which SSH servers you've connected to |
-| `~/.git-credentials` (if exists) | `/home/host/.git-credentials` | **Read-Only** | Git credentials helper | ⚠️ May contain stored Git authentication tokens |
+| **Your working directory** | `/work` | **Read/Write** (Read-Only in paranoid) | Project files you're working on | ⚠️ **FULL ACCESS** (standard/restricted): Container can read, modify, or delete ANY file in this directory. **Read-only** in paranoid mode. |
+| `$SSH_AUTH_SOCK` (socket) | `/ssh-agent` | **Read/Write** | SSH agent forwarding | ⚠️ Container can use your SSH keys for Git operations (keys stay on host). **Not mounted in paranoid mode.** |
+| `~/.claude/` | `/home/host/.claude` | **Read/Write** | Claude agents and settings | ⚠️ Container can access all your custom Claude agents (all modes) |
+| `~/.claude.json` | `/home/host/.claude.json` | **Read/Write** | Claude authentication | 🔴 **CRITICAL**: Contains your Claude API authentication token (all modes) |
+| `~/.gitconfig` | `/home/host/.gitconfig` | **Read-Only** | Git configuration | Container can see your Git username, email, and settings (all modes) |
+| `~/.config/gh` (if exists) | `/home/host/.config/gh` | **Read-Only** | GitHub CLI config | GitHub CLI authentication and settings. **Not mounted in paranoid mode.** |
+| `~/.ssh/known_hosts` | `/home/host/.ssh/known_hosts` | **Read-Only** | SSH known hosts | Container can see which SSH servers you've connected to (all modes) |
+| `~/.git-credentials` (if exists) | `/home/host/.git-credentials` | **Read-Only** | Git credentials helper | ⚠️ May contain stored Git authentication tokens (all modes) |
 
 **Security Warning**: The container has FULL read/write access to your working directory and Claude configuration. Only use cbox with trusted projects.
 
