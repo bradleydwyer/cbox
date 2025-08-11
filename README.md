@@ -179,6 +179,29 @@ docker run -it --entrypoint /bin/bash cbox:latest
 | `TERM` | Terminal type passed to container | xterm-256color |
 | `SSH_AUTH_SOCK` | SSH agent socket path | (required) |
 
+### Passing Environment Variables (New in v1.2.0)
+
+Use the `-e` flag to pass environment variables to the container:
+
+```bash
+# Pass variables from host environment  
+cbox -e AWS_PROFILE -e AWS_REGION
+
+# Set specific values
+cbox -e "ANTHROPIC_MODEL=claude-opus-4-1"
+
+# AWS Bedrock example
+export AWS_PROFILE=my-profile
+export CLAUDE_CODE_USE_BEDROCK=true
+cbox -e AWS_PROFILE -e AWS_REGION -e CLAUDE_CODE_USE_BEDROCK
+```
+
+Two formats supported:
+- `-e VAR` - Pass variable value from host environment
+- `-e VAR=value` - Set specific value in container
+
+Only variables you explicitly specify with `-e` are passed to the container.
+
 ## How it works
 
 ```
