@@ -159,8 +159,8 @@ except: pass
     # Format the update message with proper padding
     printf >&2 "\n"
     printf >&2 "┌─ cbox Update Available ────────────────────────────────┐\n"
-    printf >&2 "│  Version %-46s │\n" "$latest_version is available (you have $VERSION)"
-    printf >&2 "│  Update: cbox --update                                  │\n"
+    printf >&2 "│  Version %-45s │\n" "$latest_version is available (you have $VERSION)"
+    printf >&2 "│  Update: cbox --update                                 │\n"
     printf >&2 "└────────────────────────────────────────────────────────┘\n"
     printf >&2 "\n"
   fi
