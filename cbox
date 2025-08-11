@@ -492,6 +492,9 @@ if [[ "$VERIFY_MODE" == "1" ]]; then
   exit 0
 fi
 
+# Resolve security configuration after all arguments are parsed
+resolve_security_configuration "$SECURITY_MODE" "$NETWORK_TYPE" "$SSH_AGENT_ENABLED" "$READ_ONLY_MODE"
+
 # Check SSH agent for non-shell mode (only if SSH agent is enabled)
 if [[ "$SHELL_MODE" == "0" && "$RESOLVED_SSH_AGENT" == "true" ]]; then
   if [[ -z "${SSH_AUTH_SOCK:-}" ]]; then
@@ -509,9 +512,6 @@ if [[ "$SHELL_MODE" == "0" && "$RESOLVED_SSH_AGENT" == "true" ]]; then
     exit 1
   fi
 fi
-
-# Resolve security configuration after all arguments are parsed
-resolve_security_configuration "$SECURITY_MODE" "$NETWORK_TYPE" "$SSH_AGENT_ENABLED" "$READ_ONLY_MODE"
 
 # Validate working directory
 if [[ ! -d "$WORKDIR" ]]; then
