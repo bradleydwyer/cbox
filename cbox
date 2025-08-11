@@ -168,9 +168,9 @@ except: pass
     
     cat >&2 <<EOF
 
-┌─ cbox Update Available ─────────────────────────────────┐
+┌─ cbox Update Available ────────────────────────────────┐
 │  ${message}${spaces} │
-│  Update: cbox --update                                 │
+│  Update: cbox --update                                  │
 └─────────────────────────────────────────────────────────┘
 
 EOF
