@@ -761,6 +761,31 @@ while [[ $# -gt 0 ]]; do
       if [[ "$IS_GIT_INSTALL" == "true" ]]; then
         # Git repository update
         echo "Detected git repository installation at: $CBOX_INSTALL_DIR"
+        
+        # Check current branch
+        CURRENT_BRANCH=$(cd "$CBOX_INSTALL_DIR" && git rev-parse --abbrev-ref HEAD 2>/dev/null)
+        if [[ "$CURRENT_BRANCH" != "main" ]]; then
+          echo "⚠️  You are on branch '$CURRENT_BRANCH', not 'main'"
+          echo "Auto-update only works from the main branch to prevent losing development work."
+          echo ""
+          echo "To update, first switch to main branch:"
+          echo "  cd $CBOX_INSTALL_DIR"
+          echo "  git checkout main"
+          echo "  cbox --update"
+          exit 1
+        fi
+        
+        # Check for uncommitted changes
+        if ! (cd "$CBOX_INSTALL_DIR" && git diff-index --quiet HEAD -- 2>/dev/null); then
+          echo "⚠️  You have uncommitted changes in the cbox repository"
+          echo "Please commit or stash your changes before updating."
+          echo ""
+          echo "To check status:"
+          echo "  cd $CBOX_INSTALL_DIR"
+          echo "  git status"
+          exit 1
+        fi
+        
         echo -n "Update cbox from GitHub? [Y/n]: "
         read -r response
         if [[ -z "$response" || "$response" =~ ^[Yy] ]]; then
@@ -769,8 +794,8 @@ while [[ $# -gt 0 ]]; do
           # Store current version for comparison
           old_version="$VERSION"
           
-          # Change to cbox directory and perform git pull
-          if (cd "$CBOX_INSTALL_DIR" && git pull origin main); then
+          # Use --ff-only to prevent merge commits and ensure clean updates
+          if (cd "$CBOX_INSTALL_DIR" && git pull --ff-only origin main); then
             echo "✅ Successfully updated cbox repository"
             
             # Check if version changed
