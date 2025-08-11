@@ -2,7 +2,7 @@
 # cbox installation script - updated for CDN cache bust
 set -euo pipefail
 
-VERSION="1.1.4"
+VERSION="1.1.5"
 INSTALL_DIR="/usr/local/bin"
 REPO_URL="https://raw.githubusercontent.com/bradleydwyer/cbox/main"
 
@@ -140,9 +140,6 @@ verify_checksum() {
 download_with_verification() {
   local temp_dir="/tmp/cbox-install.$$"
   mkdir -p "$temp_dir"
-  
-  # Trap to cleanup on exit
-  trap "rm -rf '$temp_dir'" EXIT
   
   info "Downloading checksums file..."
   
@@ -345,10 +342,11 @@ main() {
   # Download and verify all files
   temp_dir=$(download_with_verification)
   
+  # Setup cleanup trap for temp directory
+  trap "rm -rf '$temp_dir'" EXIT
+  
   # Install scripts
   install_scripts "$temp_dir"
-  
-  # Cleanup is handled by trap in download_with_verification
   
   # Setup shell
   setup_shell

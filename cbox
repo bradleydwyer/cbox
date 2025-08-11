@@ -2,7 +2,7 @@
 # cbox: run Claude Code in a Docker sandbox with open network + SSH agent
 set -euo pipefail
 
-VERSION="1.1.4"
+VERSION="1.1.5"
 IMAGE="cbox:latest"
 CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/cbox"
 DOCKERFILE="${CACHE_DIR}/Dockerfile"

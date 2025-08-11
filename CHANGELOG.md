@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.5] - 2025-08-10
+
+### Fixed
+- Temporary directory cleanup issue causing "No such file or directory" errors during installation
+- Moved cleanup trap to main function to prevent premature temp directory removal
+
 ## [1.1.4] - 2025-08-10
 
 ### Fixed
@@ -125,7 +131,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for multiple concurrent instances
 - Easy cleanup and uninstallation
 
-[Unreleased]: https://github.com/bradleydwyer/cbox/compare/v1.1.4...HEAD
+[Unreleased]: https://github.com/bradleydwyer/cbox/compare/v1.1.5...HEAD
+[1.1.5]: https://github.com/bradleydwyer/cbox/compare/v1.1.4...v1.1.5
 [1.1.4]: https://github.com/bradleydwyer/cbox/compare/v1.1.3...v1.1.4
 [1.1.3]: https://github.com/bradleydwyer/cbox/compare/v1.1.2...v1.1.3
 [1.1.2]: https://github.com/bradleydwyer/cbox/compare/v1.1.1...v1.1.2
