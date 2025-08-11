@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Critical Volume Mount Bug**: Fixed volume array initialization that was overwriting mounts
+  - Changed `vols=` to `vols+=` to properly append volume mounts (lines 954, 957)
+  - This bug was preventing GitHub config directory from being mounted correctly
+  - Now all volume mounts work as intended, enabling proper GitHub CLI authentication
+- **GitHub CLI Token Extraction**: Fixed automatic token extraction for macOS keychain users
+  - Added automatic extraction of GitHub tokens from `gh` CLI when authenticated
+  - Properly handles macOS keychain authentication without exposing tokens
+  - Uses secure subprocess to prevent token exposure in process lists
+  - Added timeout handling to prevent hanging on keychain prompts
+- **Echo Command Compatibility**: Fixed echo -e flag issue in Docker environment
+  - Replaced `echo -e` with `printf` for proper escape sequence handling
+  - Ensures color codes and formatting work correctly in all environments
+- **Environment Variable Debugging**: Added proper debug output for ENV_VARS array
+  - Fixed debug output to show actual environment variables being passed
+  - Helps troubleshoot authentication and configuration issues
+
+### Security
+- **Token Security**: Enhanced security for GitHub token handling
+  - Tokens never appear in process lists or command history
+  - Uses secure piping and subshells for token extraction
+  - Validates tokens before use with proper format checking
+  - SHA256 hash redaction in logs for security
+
 ## [1.3.0] - 2025-08-11
 
 ### Added
@@ -53,13 +77,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Created comprehensive security audit reports and user guides
 - Updated CLI reference with complete security option documentation
 - Added migration guidance for users wanting enhanced security controls
-
-### Security
-- Enhanced Docker security with network isolation options
-- Read-only volume mounting capability for paranoid mode
-- Comprehensive validation prevents command injection attacks
-- Security boundary enforcement with warning system
-- Fail-safe error handling for all security configurations
 
 ### Changed
 - Extended help text to include all new security options

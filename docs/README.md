@@ -9,11 +9,13 @@ This directory contains technical documentation for cbox v1.3.0 and the security
 - **[SECURITY_QUICK_REFERENCE.md](SECURITY_QUICK_REFERENCE.md)** - Quick reference guide for security options
 - **[SECURITY_AUDIT_REPORT.md](SECURITY_AUDIT_REPORT.md)** - Comprehensive security analysis
 - **[SECURITY_TESTS_SUMMARY.md](SECURITY_TESTS_SUMMARY.md)** - Testing strategy and results
+- **[GITHUB_AUTH_SECURITY.md](GITHUB_AUTH_SECURITY.md)** - GitHub authentication security analysis
 
 ### Implementation Details
 - **[PHASE_1_IMPLEMENTATION_SUMMARY.md](PHASE_1_IMPLEMENTATION_SUMMARY.md)** - Complete implementation summary
 - **[BACKWARD_COMPATIBILITY_GUARANTEE.md](BACKWARD_COMPATIBILITY_GUARANTEE.md)** - Backward compatibility analysis
 - **[EXPERT_REVIEW_ASSESSMENT.md](EXPERT_REVIEW_ASSESSMENT.md)** - Expert subagent reviews
+- **[GITHUB_CLI_AUTHENTICATION.md](GITHUB_CLI_AUTHENTICATION.md)** - GitHub CLI authentication technical documentation
 
 ### Analysis and Research
 - **[DOCKER_IN_DOCKER_ANALYSIS.md](DOCKER_IN_DOCKER_ANALYSIS.md)** - Docker-in-Docker security analysis

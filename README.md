@@ -34,11 +34,14 @@ A simple Docker-based sandbox for running Claude Code with full network access a
 - Proper file ownership (no root-owned files)
 - Git configuration and SSH known hosts
 
+**Why use cbox?** The primary use case is to safely run Claude Code in "bypass mode" (where Claude can execute commands without approval) while maintaining security boundaries. This gives you the productivity benefits of autonomous Claude operation with the safety of containerization - protecting your host system from unintended changes while still allowing productive work on your projects.
+
 ## System Requirements
 
 - **Docker**: Docker Desktop 20.10+ or Docker Engine with BuildKit support
-- **Operating System**: macOS, Linux, or WSL2 on Windows
-- **Shell**: Bash 4.0+ or Zsh
+- **Operating System**: macOS (primary), Linux, or WSL2 on Windows
+  - **Note**: This project has been primarily developed and tested on macOS. Linux compatibility is expected but may require minor adjustments.
+- **Shell**: Bash 4.0+ or Zsh (Bash 3.2+ supported with compatibility fixes)
 - **SSH Agent**: Active SSH agent with GitHub key loaded
 - **Claude Code CLI**: Installed on host (optional but recommended for authentication)
 - **Memory**: At least 4GB RAM available for Docker
@@ -55,13 +58,30 @@ A simple Docker-based sandbox for running Claude Code with full network access a
 
 ### GitHub CLI Authentication (Optional)
 
-cbox automatically forwards GitHub authentication from your host system:
+cbox provides seamless GitHub authentication with automatic token forwarding:
 
-- **Environment Variables**: If you have `GH_TOKEN` or `GITHUB_TOKEN` set, they're automatically forwarded
-- **GitHub CLI Config**: Your `~/.config/gh` directory is mounted for seamless `gh` CLI access
-- **Security Modes**: 
-  - `standard`/`restricted`: Full GitHub access (tokens and config forwarded)
-  - `paranoid`: No GitHub authentication (maximum security isolation)
+#### Automatic Authentication Methods
+
+1. **Environment Variables**: `GH_TOKEN` or `GITHUB_TOKEN` are automatically detected and forwarded
+2. **GitHub CLI Config**: Your `~/.config/gh` directory is mounted for full `gh` CLI access
+3. **macOS Keychain Integration**: Automatically extracts tokens from `gh` CLI when using keychain authentication
+   - No manual token export needed for macOS users
+   - Secure extraction prevents token exposure in process lists
+   - Works with GitHub's recommended keychain storage
+
+#### Security Modes & GitHub Access
+
+- **`standard`/`restricted` modes**: Full GitHub authentication (tokens and config forwarded)
+- **`paranoid` mode**: No GitHub authentication (maximum security isolation)
+
+#### How It Works
+
+When you run cbox, it automatically:
+1. Checks for `GH_TOKEN` or `GITHUB_TOKEN` environment variables
+2. If not found but `gh` CLI is authenticated, securely extracts the token
+3. Mounts your GitHub CLI config directory (`~/.config/gh`)
+4. Sets up proper environment variables in the container
+5. Validates token format and logs success (with SHA256 hash for security)
 
 No additional setup needed - if GitHub CLI works on your host, it works in cbox!
 

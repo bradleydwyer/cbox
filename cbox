@@ -220,8 +220,9 @@ configure_github_authentication() {
       local escaped_token
       escaped_token=$(printf '%q' "$token_value")
       # Output the arguments for array capture
-      echo "-e"
-      echo "${token_var}=${escaped_token}"
+      # Use printf to avoid echo interpreting -e as a flag
+      printf '%s\n' "-e"
+      printf '%s\n' "${token_var}=${escaped_token}"
       
       # Secure logging - only log token presence, not value
       if [[ "${CBOX_VERBOSE:-0}" == "1" ]]; then
@@ -259,9 +260,22 @@ configure_github_authentication() {
     # Atomic directory validation to prevent TOCTOU attacks
     # Use a single stat call to get all file information atomically
     local stat_output
-    if ! stat_output=$(stat -L -c "%F:%u:%g:%a" "$gh_config_dir" 2>/dev/null); then
-      # Path doesn't exist or is not accessible
-      return 1
+    
+    # Detect stat version (macOS uses BSD stat, Linux uses GNU stat)
+    if stat --version >/dev/null 2>&1; then
+      # GNU stat (Linux)
+      if ! stat_output=$(stat -L -c "%F:%u:%g:%a" "$gh_config_dir" 2>/dev/null); then
+        # Path doesn't exist or is not accessible
+        return 1
+      fi
+    else
+      # BSD stat (macOS)
+      if ! stat_output=$(stat -L -f "%HT:%u:%g:%Mp%Lp" "$gh_config_dir" 2>/dev/null); then
+        # Path doesn't exist or is not accessible
+        return 1
+      fi
+      # Convert BSD stat output to match GNU format
+      stat_output="${stat_output/Directory/directory}"
     fi
     
     # Parse stat output: file_type:uid:gid:permissions
@@ -345,6 +359,44 @@ configure_github_authentication() {
         elif [[ "${CBOX_VERBOSE:-0}" == "1" ]]; then
           echo "cbox: Warning - Failed to validate GITHUB_TOKEN" >&2
         fi
+      elif command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+        # Attempt to extract token from gh CLI if available and authenticated
+        # This handles macOS keychain authentication
+        if [[ "${CBOX_VERBOSE:-0}" == "1" ]]; then
+          echo "cbox: Attempting to extract GitHub token from gh CLI..." >&2
+        fi
+        local extracted_token
+        # Use a subshell to prevent token from appearing in process list
+        # The token is piped directly and never appears as an argument
+        if extracted_token=$(
+          set +x  # Ensure trace is off
+          # Prevent history recording
+          set +o history 2>/dev/null || true
+          # Extract token with timeout to prevent hanging on keychain prompts
+          # Note: timeout may not be available on macOS, use if available
+          if command -v timeout >/dev/null 2>&1; then
+            timeout 2s gh auth token 2>/dev/null
+          else
+            # Fallback without timeout - may hang on keychain prompt
+            gh auth token 2>/dev/null
+          fi
+        ) && [[ -n "$extracted_token" ]]; then
+          # Validate the extracted token
+          if token_args=$(forward_github_token "GH_TOKEN" "$extracted_token"); then
+            # Read the output into array
+            while IFS= read -r line; do
+              temp_env_vars+=("$line")
+            done <<< "$token_args"
+            auth_success=1
+            if [[ "${CBOX_VERBOSE:-0}" == "1" ]]; then
+              echo "cbox: GitHub authentication extracted from gh CLI (keychain)" >&2
+            fi
+          elif [[ "${CBOX_VERBOSE:-0}" == "1" ]]; then
+            echo "cbox: Warning - Failed to validate extracted GitHub token" >&2
+          fi
+          # Clear the extracted token immediately
+          unset extracted_token
+        fi
       fi
       
       # Attempt to mount GitHub CLI config directory
@@ -355,6 +407,9 @@ configure_github_authentication() {
         while IFS= read -r line; do
           temp_vols+=("$line")
         done <<< "$config_args"
+        # Set GH_CONFIG_DIR so gh CLI finds the mounted config
+        temp_env_vars+=("-e")
+        temp_env_vars+=("GH_CONFIG_DIR=/home/host/.config/gh")
         config_success=1
       elif [[ "${CBOX_VERBOSE:-0}" == "1" ]]; then
         echo "cbox: Warning - Failed to mount GitHub config directory" >&2
@@ -896,10 +951,10 @@ fi
 # Volume mounts (only if sources exist)
 # Apply read-only mode if configured
 if [[ "$RESOLVED_READ_ONLY" == "true" ]]; then
-  vols=(-v "$WORKDIR":/work:ro)
+  vols+=(-v "$WORKDIR":/work:ro)
   echo "cbox: 🔒 Read-only mode enabled - project directory is write-protected" >&2
 else
-  vols=(-v "$WORKDIR":/work)
+  vols+=(-v "$WORKDIR":/work)
 fi
 
 # Mount SSH agent socket only if enabled
@@ -970,6 +1025,14 @@ if [[ "${CBOX_VERBOSE:-0}" == "1" ]]; then
   echo "cbox: Volume mounts: ${#vols[@]} volumes" >&2
   if [[ ${#ENV_VARS[@]} -gt 0 ]]; then
     echo "cbox: Passing ${#ENV_VARS[@]} environment variables to container" >&2
+    # Debug: show what's in ENV_VARS (hide actual token values)
+    for ((i=0; i<${#ENV_VARS[@]}; i++)); do
+      if [[ "${ENV_VARS[$i]}" =~ ^GH_TOKEN= ]] || [[ "${ENV_VARS[$i]}" =~ ^GITHUB_TOKEN= ]]; then
+        echo "  ENV_VARS[$i]: ${ENV_VARS[$i]%%=*}=<redacted>" >&2
+      else
+        echo "  ENV_VARS[$i]: ${ENV_VARS[$i]}" >&2
+      fi
+    done
   fi
 fi
 
