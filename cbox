@@ -747,10 +747,20 @@ while [[ $# -gt 0 ]]; do
       echo "🔄 cbox Auto-Update"
       echo ""
       
-      # Check if we're in a git repository
-      if [[ -d .git ]] && git rev-parse --git-dir >/dev/null 2>&1; then
+      # Find the cbox installation directory
+      CBOX_INSTALL_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+      
+      # Check if cbox is installed via git and is the cbox repository
+      IS_GIT_INSTALL=false
+      if [[ -d "$CBOX_INSTALL_DIR/.git" ]] && (cd "$CBOX_INSTALL_DIR" && git rev-parse --git-dir >/dev/null 2>&1); then
+        if (cd "$CBOX_INSTALL_DIR" && git remote get-url origin 2>/dev/null | grep -q "bradleydwyer/cbox"); then
+          IS_GIT_INSTALL=true
+        fi
+      fi
+      
+      if [[ "$IS_GIT_INSTALL" == "true" ]]; then
         # Git repository update
-        echo "Detected git repository installation"
+        echo "Detected git repository installation at: $CBOX_INSTALL_DIR"
         echo -n "Update cbox from GitHub? [Y/n]: "
         read -r response
         if [[ -z "$response" || "$response" =~ ^[Yy] ]]; then
@@ -759,8 +769,8 @@ while [[ $# -gt 0 ]]; do
           # Store current version for comparison
           old_version="$VERSION"
           
-          # Perform git pull
-          if git pull origin main; then
+          # Change to cbox directory and perform git pull
+          if (cd "$CBOX_INSTALL_DIR" && git pull origin main); then
             echo "✅ Successfully updated cbox repository"
             
             # Check if version changed
@@ -785,7 +795,6 @@ while [[ $# -gt 0 ]]; do
           echo "Update cancelled"
         fi
       else
-        # Non-git installation - use curl
         echo "Updating cbox using installer script..."
         echo -n "Download and install latest version? [Y/n]: "
         read -r response
