@@ -614,13 +614,15 @@ Try:
 - Environment variable passthrough (CBOX_REBUILD, CBOX_VERBOSE)
 - Basic command-line options (--help, --version, --verbose, --verify, --shell)
 - Installation and update scripts
+- **Security modes** (standard, restricted, paranoid) with network and SSH agent control
+- **Auto-update notifications** via GitHub API with tool fallbacks
+- **Claude Code self-updates** within containers using persistent npm directories
+- **Update management commands** (--update, --update-check, --update-skip)
 
 ### 📋 Planned Features (Not Yet Implemented)
 - **Configuration file support** (.cbox.json parsing)
 - **Telemetry system** for usage analytics
 - **Custom Dockerfile support**
-- **Security modes** (restricted, paranoid)
-- **Auto-update functionality**
 - **Advanced telemetry commands** (--telemetry-status, etc.)
 
 Note: The `.cbox.json.example` file shows the planned configuration format, but this functionality is not yet implemented in the current version.

@@ -2,7 +2,7 @@
 # cbox: run Claude Code in a Docker sandbox with open network + SSH agent
 set -euo pipefail
 
-VERSION="1.3.0"
+VERSION="1.4.0"
 IMAGE="cbox:latest"
 CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/cbox"
 DOCKERFILE="${CACHE_DIR}/Dockerfile"
@@ -32,6 +32,11 @@ Options:
   --verify         Verify installation and exit
   -e VAR           Pass environment variable to container
   -e VAR=value     Pass environment variable with specific value
+
+Update Options:
+  --update         Show update instructions
+  --update-check   Check for updates now
+  --update-skip    Skip update notifications for 7 days
 
 Security Options:
   --security-mode MODE    Set security mode: standard|restricted|paranoid (default: standard)
@@ -67,6 +72,68 @@ Examples:
 
 For more information, see: https://github.com/bradleydwyer/cbox
 EOF
+}
+
+# Update check function with tool fallbacks
+check_for_updates() {
+  # Respect security modes and user preferences
+  [[ "$SECURITY_MODE" == "paranoid" ]] && return 0
+  [[ "${CBOX_NO_UPDATE_CHECK:-}" == "1" ]] && return 0
+  
+  # Rate limiting (24-hour cache)
+  local cache_file="$CACHE_DIR/last_update_check"
+  if [[ -f "$cache_file" ]]; then
+    local cache_age=$(( $(date +%s) - $(stat -c %Y "$cache_file" 2>/dev/null || stat -f %m "$cache_file" 2>/dev/null || echo 0) ))
+    [[ $cache_age -lt 86400 ]] && return 0
+  fi
+  
+  local api_url="https://api.github.com/repos/bradleydwyer/cbox/releases/latest"
+  local latest_version=""
+  
+  # Try tools in order of preference
+  if command -v curl >/dev/null 2>&1; then
+    latest_version=$(curl -s --max-time 5 --connect-timeout 3 "$api_url" 2>/dev/null | \
+      grep -o '"tag_name"[[:space:]]*:[[:space:]]*"[^"]*"' | \
+      sed 's/.*"v*\([^"]*\)"/\1/' | head -1)
+  elif command -v wget >/dev/null 2>&1; then
+    latest_version=$(wget -qO- --timeout=5 --connect-timeout=3 "$api_url" 2>/dev/null | \
+      grep -o '"tag_name"[[:space:]]*:[[:space:]]*"[^"]*"' | \
+      sed 's/.*"v*\([^"]*\)"/\1/' | head -1)
+  elif command -v python3 >/dev/null 2>&1; then
+    latest_version=$(python3 -c "
+import urllib.request, json, sys
+try:
+    with urllib.request.urlopen('$api_url', timeout=5) as r:
+        data = json.loads(r.read())
+        print(data.get('tag_name', '').lstrip('v'))
+except: pass
+" 2>/dev/null)
+  elif command -v python >/dev/null 2>&1; then
+    latest_version=$(python -c "
+import urllib2, json, sys
+try:
+    r = urllib2.urlopen('$api_url', timeout=5)
+    data = json.loads(r.read())
+    print(data.get('tag_name', '').lstrip('v'))
+except: pass
+" 2>/dev/null)
+  fi
+  
+  # Show notification if update available
+  if [[ -n "$latest_version" && "$latest_version" != "$VERSION" ]]; then
+    cat >&2 <<EOF
+
+┌─ cbox Update Available ─────────────────────────────────┐
+│  Version $latest_version is available (you have $VERSION)      │
+│  Update: cbox --update                                 │
+└─────────────────────────────────────────────────────────┘
+
+EOF
+  fi
+  
+  # Update cache
+  mkdir -p "$(dirname "$cache_file")"
+  touch "$cache_file"
 }
 
 # --- Validation Functions ---
@@ -636,6 +703,46 @@ while [[ $# -gt 0 ]]; do
       VERIFY_MODE=1
       shift
       ;;
+    --update)
+      cat <<EOF
+To update cbox to the latest version:
+
+Option 1: Quick update (recommended)
+  curl -fsSL https://raw.githubusercontent.com/bradleydwyer/cbox/main/install.sh | bash
+
+Option 2: Manual update
+  git pull origin main  # If you cloned the repo
+  
+Option 3: Download directly
+  https://github.com/bradleydwyer/cbox/releases/latest
+
+After updating cbox, run 'cbox-update' to rebuild with latest Claude Code.
+EOF
+      exit 0
+      ;;
+    --update-check)
+      echo "Checking for updates..."
+      rm -f "$CACHE_DIR/last_update_check"
+      check_for_updates
+      echo "✓ Check complete"
+      exit 0
+      ;;
+    --update-skip)
+      mkdir -p "$CACHE_DIR"
+      # Set timestamp 7 days in the future
+      if date -d "+7 days" >/dev/null 2>&1; then
+        # GNU date (Linux)
+        date -d "+7 days" +%s > "$CACHE_DIR/last_update_check"
+      elif date -v "+7d" >/dev/null 2>&1; then
+        # BSD date (macOS)
+        date -v "+7d" +%s > "$CACHE_DIR/last_update_check"
+      else
+        # Fallback: current time + 7 days in seconds
+        echo $(($(date +%s) + 604800)) > "$CACHE_DIR/last_update_check"
+      fi
+      echo "Update notifications disabled for 7 days"
+      exit 0
+      ;;
     -e)
       if [[ $# -lt 2 ]]; then
         echo "cbox: Option -e requires an argument" >&2
@@ -876,6 +983,10 @@ mkdir -p "$CACHE_DIR"
 mkdir -p "$CACHE_DIR/cargo-registry"
 mkdir -p "$CACHE_DIR/cargo-git"
 
+# Create persistent npm directories for Claude Code self-updates
+mkdir -p "$CACHE_DIR/npm-user"
+mkdir -p "$CACHE_DIR/npm-cache"
+
 # --- minimal image with Claude Code CLI ---
 if [[ ! -f "$DOCKERFILE" ]]; then
   cat >"$DOCKERFILE" <<'EOF'
@@ -884,7 +995,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git openssh-client ca-certificates tini bash less curl wget procps build-essential \
     pkg-config libssl-dev sudo && \
     rm -rf /var/lib/apt/lists/*
-RUN npm i -g @anthropic-ai/claude-code@latest
+# Create user npm directory structure (Claude Code will be installed at runtime)
+RUN mkdir -p /opt/npm-user/{lib/node_modules,bin,cache} && \
+    chmod 755 /opt/npm-user /opt/npm-user/lib /opt/npm-user/lib/node_modules /opt/npm-user/bin /opt/npm-user/cache
+ENV PATH="/opt/npm-user/bin:$PATH"
+ENV NPM_CONFIG_PREFIX="/opt/npm-user"
 # Install line counting utilities
 RUN apt-get update && apt-get install -y --no-install-recommends cloc && \
     rm -rf /var/lib/apt/lists/*
@@ -917,6 +1032,17 @@ if [ -n "$HOST_UID" ] && [ -n "$HOST_GID" ]; then\n\
   chown -R $HOST_UID:$HOST_GID /home/host 2>/dev/null || true\n\
   # Fix Rust/Cargo permissions for the host user\n\
   chown -R $HOST_UID:$HOST_GID /opt/rust 2>/dev/null || true\n\
+  # Fix npm permissions for Claude Code self-updates\n\
+  chown -R $HOST_UID:$HOST_GID /opt/npm-user 2>/dev/null || true\n\
+  # Configure npm for user installation\n\
+  gosu host npm config set prefix /opt/npm-user\n\
+  gosu host npm config set cache /opt/npm-user/cache\n\
+  # Install Claude Code if not present (first run)\n\
+  if [ ! -x "/opt/npm-user/bin/claude" ]; then\n\
+    echo "Installing Claude Code (one-time setup, ~30 seconds)..."\n\
+    gosu host npm install -g @anthropic-ai/claude-code@latest\n\
+    echo "✓ Claude Code installed successfully"\n\
+  fi\n\
   # Configure sudo for the host user\n\
   echo "host ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/host\n\
   chmod 440 /etc/sudoers.d/host\n\
@@ -977,6 +1103,15 @@ vols+=(-v "$HOME/.claude":/home/host/.claude)
 # Mount persistent Cargo cache directories to speed up Rust builds
 vols+=(-v "$CACHE_DIR/cargo-registry":/opt/rust/registry)
 vols+=(-v "$CACHE_DIR/cargo-git":/opt/rust/git)
+
+# Mount persistent npm directories for Claude Code self-updates
+vols+=(-v "$CACHE_DIR/npm-user":/opt/npm-user)
+vols+=(-v "$CACHE_DIR/npm-cache":/opt/npm-user/cache)
+
+# Background update check (non-blocking)
+if [[ "$SHELL_MODE" == "0" && "$VERIFY_MODE" == "0" ]]; then
+  (check_for_updates 2>/dev/null &)
+fi
 
 # Print version when running
 echo "cbox v${VERSION}" >&2

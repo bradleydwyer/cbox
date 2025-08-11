@@ -4,7 +4,10 @@
       "Bash(cat:*)",
       "Bash(docker inspect:*)",
       "Bash(./cbox-update)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(docker run:*)",
+      "WebFetch(domain:www.npmjs.com)",
+      "WebFetch(domain:github.com)"
     ],
     "deny": []
   }
