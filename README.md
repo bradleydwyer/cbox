@@ -317,7 +317,7 @@ The security mode you choose significantly affects what resources are shared:
 
 | Resource Type | Standard Mode | Restricted Mode | Paranoid Mode |
 |--------------|---------------|-----------------|---------------|
-| **Network** | Full host network | Isolated bridge | No network access |
+| **Network** | Full host network | Isolated bridge | Isolated bridge |
 | **SSH Agent** | ✅ Forwarded | ✅ Forwarded | ❌ Blocked |
 | **Project Directory** | Read/Write | Read/Write | Read-Only |
 | **GitHub Tokens** | ✅ Forwarded | ✅ Forwarded | ❌ Blocked |

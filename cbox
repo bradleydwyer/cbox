@@ -497,8 +497,9 @@ resolve_security_configuration() {
       final_read_only="false"
       ;;
     paranoid)
-      # Maximum security - no network, no SSH, read-only
-      final_network="none"
+      # Maximum security - isolated network, no SSH, read-only
+      # Note: bridge network required for Claude Code functionality
+      final_network="bridge"
       final_ssh="false"
       final_read_only="true"
       ;;
@@ -543,9 +544,10 @@ validate_security_consistency() {
   
   # Warn about downgrades from paranoid mode
   if [[ "$mode" == "paranoid" ]]; then
-    if [[ "$network" != "none" ]]; then
-      echo "cbox: ⚠️  Security Warning: Network enabled in paranoid mode (expected: none, got: $network)" >&2
-      echo "  This reduces the isolation benefits of paranoid mode" >&2
+    # Bridge network is now expected for paranoid mode (required for Claude Code)
+    if [[ "$network" == "host" ]]; then
+      echo "cbox: ⚠️  Security Warning: Host network enabled in paranoid mode (expected: bridge, got: $network)" >&2
+      echo "  This reduces the network isolation benefits of paranoid mode" >&2
       has_warnings=1
     fi
     

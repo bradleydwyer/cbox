@@ -95,7 +95,7 @@ Set the security mode for the container. Controls network access, SSH agent avai
 **Modes:**
 - `standard`: Host network, SSH agent enabled, read/write access (default - same as v1.2.1)
 - `restricted`: Bridge network with DNS, SSH agent enabled, read/write access  
-- `paranoid`: No network access, no SSH agent, read-only file system
+- `paranoid`: Isolated bridge network, no SSH agent, read-only file system
 
 ```bash
 cbox --security-mode standard   # Default mode (backward compatible)
@@ -109,7 +109,7 @@ Override the network configuration for the container. Takes precedence over secu
 **Types:**
 - `host`: Direct access to host network (default for standard mode)
 - `bridge`: Isolated bridge network with DNS (default for restricted mode)
-- `none`: No network access (default for paranoid mode)
+- `none`: No network access (not recommended - breaks Claude Code functionality)
 
 ```bash
 cbox --network host     # Host network access
