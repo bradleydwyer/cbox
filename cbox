@@ -156,10 +156,20 @@ except: pass
   
   # Show notification if update available
   if [[ -n "$latest_version" && "$latest_version" != "$VERSION" ]]; then
+    # Calculate padding for proper box alignment
+    local message="Version $latest_version is available (you have $VERSION)"
+    local message_length=${#message}
+    local box_width=60
+    local padding=$((box_width - message_length - 4))  # 4 for "│  " and " │"
+    local spaces=""
+    for ((i=0; i<padding; i++)); do
+      spaces="${spaces} "
+    done
+    
     cat >&2 <<EOF
 
 ┌─ cbox Update Available ─────────────────────────────────┐
-│  Version $latest_version is available (you have $VERSION)      │
+│  ${message}${spaces} │
 │  Update: cbox --update                                 │
 └─────────────────────────────────────────────────────────┘
 
