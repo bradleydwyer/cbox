@@ -141,6 +141,173 @@ validate_resource_limits() {
   return 0
 }
 
+# --- GitHub CLI Authentication Configuration ---
+
+# Configure GitHub CLI authentication based on security mode and available credentials
+configure_github_authentication() {
+  local mode="$1"
+  
+  # Validate required parameter
+  if [[ -z "$mode" ]]; then
+    echo "cbox: Internal error - configure_github_authentication called without mode" >&2
+    return 1
+  fi
+  
+  # Secure token validation function - fixed for modern GitHub tokens
+  validate_github_token() {
+    local input_token
+    input_token="$1" # gitleaks:allow
+    
+    # Length limits to prevent ReDoS attacks
+    if [[ ${#input_token} -lt 20 ]] || [[ ${#input_token} -gt 200 ]]; then
+      return 1
+    fi
+    
+    # Validate against current GitHub token formats (2024)
+    # Classic personal access tokens: PREFIX_36_random_chars (40 total)
+    # OAuth tokens: Different prefix, same 36 char pattern (40 total) 
+    # User-to-server tokens: Another prefix, 36 chars (40 total)
+    # Server-to-server tokens: Different prefix, 36 chars (40 total)
+    # Refresh tokens: Another prefix type, 36 chars (40 total)
+    # Fine-grained PAT: Longer prefix with 59 char suffix (~93 total)
+    
+    # Use grep to avoid ReDoS vulnerabilities in bash regex
+    if echo "$input_token" | grep -qE '^gh[pou]_[A-Za-z0-9]{36}$' || \
+       echo "$input_token" | grep -qE '^gh[sr]_[A-Za-z0-9]{36}$' || \
+       echo "$input_token" | grep -qE '^github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}$'; then
+      
+      # Check for shell metacharacters that could cause command injection
+      if [[ "$input_token" =~ [\$\`\(\)\{\}\[\]\<\>\|\&\;\'\"\\\n\r] ]]; then
+        return 1
+      fi
+      
+      return 0
+    fi
+    
+    # Legacy 40-character hex tokens (pre-2021, still valid but deprecated)  
+    if echo "$input_token" | grep -qE '^[a-f0-9]{40}$'; then
+      return 0
+    fi
+    
+    return 1
+  }
+  
+  # Helper function for secure token forwarding
+  forward_github_token() {
+    local token_var="$1" 
+    local token_value="$2"
+    local -n temp_env_ref="$3"
+    
+    if validate_github_token "$token_value"; then
+      # Use printf %q for proper shell escaping to prevent injection
+      local escaped_token
+      escaped_token=$(printf '%q' "$token_value")
+      temp_env_ref+=("-e" "${token_var}=${escaped_token}")
+      
+      # Secure logging - only log token presence, not value
+      if [[ "${CBOX_VERBOSE:-0}" == "1" ]]; then
+        local token_hash
+        token_hash=$(echo -n "$token_value" | sha256sum 2>/dev/null | cut -c1-8 || echo "unknown")
+        echo "cbox: GitHub authentication: ${token_var} [sha256:${token_hash}...] forwarded" >&2
+      fi
+      return 0
+    else
+      # Only show validation errors in verbose mode to avoid information leakage
+      if [[ "${CBOX_VERBOSE:-0}" == "1" ]]; then
+        echo "cbox: Warning - GitHub token format validation failed for ${token_var}" >&2
+      fi
+      return 1
+    fi
+  }
+  
+  # Helper function for secure config directory mounting
+  mount_github_config() {
+    local -n temp_vols_ref="$1"
+    local gh_config_dir="$HOME/.config/gh"
+    
+    # Secure directory validation to prevent TOCTOU attacks
+    if [[ -e "$gh_config_dir" ]]; then
+      # Ensure it's a directory, not a symlink (prevent symlink attacks)
+      if [[ -d "$gh_config_dir" ]] && [[ ! -L "$gh_config_dir" ]]; then
+        # Verify ownership to prevent privilege escalation
+        if [[ -O "$gh_config_dir" ]]; then
+          # Use realpath to resolve any remaining symlinks and validate final path
+          local real_path
+          real_path=$(realpath "$gh_config_dir" 2>/dev/null)
+          if [[ "$real_path" == "$HOME/.config/gh" ]] && [[ -r "$real_path" ]]; then
+            temp_vols_ref+=(-v "$real_path":/home/host/.config/gh:ro)
+            if [[ "${CBOX_VERBOSE:-0}" == "1" ]]; then
+              echo "cbox: GitHub authentication: config directory mounted (read-only)" >&2
+            fi
+            return 0
+          fi
+        fi
+      fi
+    fi
+    return 1
+  }
+  
+  # Use local arrays for transactional behavior - only commit on success
+  local temp_env_vars=()
+  local temp_vols=()
+  
+  # Configure authentication based on security mode
+  case "$mode" in
+    standard|restricted)
+      # Process tokens in order of precedence (GH_TOKEN preferred over GITHUB_TOKEN)
+      if [[ -n "${GH_TOKEN:-}" ]]; then
+        forward_github_token "GH_TOKEN" "$GH_TOKEN" temp_env_vars
+      elif [[ -n "${GITHUB_TOKEN:-}" ]]; then
+        forward_github_token "GITHUB_TOKEN" "$GITHUB_TOKEN" temp_env_vars  
+      fi
+      
+      # Attempt to mount GitHub CLI config directory
+      mount_github_config temp_vols
+      ;;
+      
+    paranoid)
+      # In paranoid mode, warn if GitHub auth is available but not forwarded
+      if [[ "${CBOX_VERBOSE:-0}" == "1" ]]; then
+        if [[ -n "${GH_TOKEN:-}${GITHUB_TOKEN:-}" ]] || [[ -d "$HOME/.config/gh" ]]; then
+          cat >&2 <<-EOF
+			cbox: ⚠️  PARANOID MODE: GitHub authentication disabled
+			  Tokens and configuration will NOT be forwarded to container.
+			  Switch to 'standard' or 'restricted' mode to enable GitHub access.
+			EOF
+        fi
+      fi
+      # No GitHub config mounting or token forwarding in paranoid mode
+      ;;
+      
+    *)
+      echo "cbox: Internal error - invalid security mode: $mode" >&2
+      return 1
+      ;;
+  esac
+  
+  # Network consistency validation - fail fast on unusable configurations
+  if [[ "$RESOLVED_NETWORK" == "none" ]] && [[ ${#temp_env_vars[@]} -gt 0 ]]; then
+    for env_var in "${temp_env_vars[@]}"; do
+      if [[ "$env_var" =~ (GH_TOKEN|GITHUB_TOKEN) ]]; then
+        echo "cbox: Configuration Error: GitHub tokens present but network disabled" >&2
+        echo "  GitHub CLI operations will fail without network access" >&2
+        echo "  Remove tokens or change --network setting" >&2
+        return 1
+      fi
+    done
+  fi
+  
+  # Atomic commit - only modify global arrays if all validations passed
+  if [[ ${#temp_env_vars[@]} -gt 0 ]]; then
+    ENV_VARS+=("${temp_env_vars[@]}")
+  fi
+  if [[ ${#temp_vols[@]} -gt 0 ]]; then
+    vols+=("${temp_vols[@]}")
+  fi
+  
+  return 0
+}
+
 # --- Security Configuration Resolution Function ---
 
 # Resolve final security configuration based on mode and overrides
@@ -495,6 +662,12 @@ fi
 # Resolve security configuration after all arguments are parsed
 resolve_security_configuration "$SECURITY_MODE" "$NETWORK_TYPE" "$SSH_AGENT_ENABLED" "$READ_ONLY_MODE"
 
+# Configure GitHub CLI authentication based on resolved security mode
+if ! configure_github_authentication "$SECURITY_MODE"; then
+  echo "cbox: Failed to configure GitHub authentication" >&2
+  exit 1
+fi
+
 # Check SSH agent for non-shell mode (only if SSH agent is enabled)
 if [[ "$SHELL_MODE" == "0" && "$RESOLVED_SSH_AGENT" == "true" ]]; then
   if [[ -z "${SSH_AUTH_SOCK:-}" ]]; then
@@ -629,6 +802,7 @@ vols+=(-v "$HOME/.claude":/home/host/.claude)
 [[ -f "$HOME/.ssh/known_hosts" ]] && vols+=(-v "$HOME/.ssh/known_hosts":/home/host/.ssh/known_hosts:ro)
 [[ -f "$HOME/.git-credentials" ]] && vols+=(-v "$HOME/.git-credentials":/home/host/.git-credentials:ro)
 
+
 # Mount persistent Cargo cache directories to speed up Rust builds
 vols+=(-v "$CACHE_DIR/cargo-registry":/opt/rust/registry)
 vols+=(-v "$CACHE_DIR/cargo-git":/opt/rust/git)
@@ -674,6 +848,7 @@ if [[ ${#CLI_ENV_VARS[@]} -gt 0 ]]; then
     fi
   done
 fi
+
 
 # Show what we're doing in verbose mode
 if [[ "${CBOX_VERBOSE:-0}" == "1" ]]; then
