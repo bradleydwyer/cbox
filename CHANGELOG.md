@@ -7,6 +7,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2025-08-11
+
+### Added
+- **Security Modes**: Three distinct security levels for different use cases
+  - `standard` mode: Current behavior (default) - host network, SSH agent, read/write
+  - `restricted` mode: Bridge network with DNS, SSH agent enabled, read/write
+  - `paranoid` mode: No network, no SSH agent, read-only volumes
+- **Security CLI Options**: Comprehensive command-line security controls
+  - `--security-mode MODE`: Set security level (standard|restricted|paranoid)
+  - `--network TYPE`: Override network access (host|bridge|none)
+  - `--ssh-agent BOOL`: Override SSH agent setting (true|false)
+  - `--read-only`: Force read-only project directory mount
+- **Input Validation**: Comprehensive validation preventing command injection
+  - Strict whitelist validation for all security parameters
+  - Command injection prevention throughout CLI parsing
+  - Path traversal protection for all file operations
+- **Security Warnings**: Clear warnings for potentially dangerous configurations
+  - Warns when overriding paranoid mode with less secure options
+  - Validates security configuration consistency
+  - Anti-bypass detection for security environment variables
+- **Enhanced Documentation**: Complete security mode documentation
+  - Updated help text with security options and examples
+  - Security quick reference guide for common scenarios
+  - Comprehensive technical design documentation
+
+### Security
+- Enhanced container security with granular network and access controls
+- Maintained all existing security hardening (capabilities, tmpfs mounts, etc.)
+- Added fail-safe error handling with security-first approach
+- Implemented defense-in-depth security validation
+
+### Documentation
+- Added security mode examples to help text and README
+- Created comprehensive security audit reports and user guides
+- Updated CLI reference with complete security option documentation
+- Added migration guidance for users wanting enhanced security controls
+  - `--security-mode MODE`: Set security mode (standard|restricted|paranoid)
+  - `--network TYPE`: Override network type (host|bridge|none)
+  - `--ssh-agent BOOL`: Override SSH agent setting (true|false)
+  - `--read-only`: Force read-only project directory mount
+- **Comprehensive Input Validation**: All security arguments validated with strict whitelists
+- **Security Configuration Warnings**: Warns when overriding security mode defaults
+- **Anti-bypass Protection**: Prevents security bypass attempts through environment variables
+
+### Security
+- Enhanced Docker security with network isolation options
+- Read-only volume mounting capability for paranoid mode
+- Comprehensive validation prevents command injection attacks
+- Security boundary enforcement with warning system
+- Fail-safe error handling for all security configurations
+
+### Changed
+- Extended help text to include all new security options
+- Enhanced Docker integration with network configuration control
+- Improved error messages for security-related failures
+
+### Documentation
+- Added comprehensive security modes documentation
+- Updated CLI reference with security options
+- Added security quick reference guide
+- Enhanced examples with security mode usage
+
 ## [1.2.1] - 2025-08-11
 
 ### Fixed
@@ -172,7 +234,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for multiple concurrent instances
 - Easy cleanup and uninstallation
 
-[Unreleased]: https://github.com/bradleydwyer/cbox/compare/v1.2.1...HEAD
+[Unreleased]: https://github.com/bradleydwyer/cbox/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/bradleydwyer/cbox/compare/v1.2.1...v1.3.0
 [1.2.1]: https://github.com/bradleydwyer/cbox/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/bradleydwyer/cbox/compare/v1.1.6...v1.2.0
 [1.1.6]: https://github.com/bradleydwyer/cbox/compare/v1.1.5...v1.1.6

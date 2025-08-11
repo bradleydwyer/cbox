@@ -1,6 +1,6 @@
 # cbox - Claude Code Sandbox
 
-[![Version](https://img.shields.io/badge/version-1.2.1-blue.svg)](https://github.com/bradleydwyer/cbox/releases)
+[![Version](https://img.shields.io/badge/version-1.3.0-blue.svg)](https://github.com/bradleydwyer/cbox/releases)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Docker](https://img.shields.io/badge/docker-%3E%3D20.10-blue.svg)](https://www.docker.com/)
 [![Platform](https://img.shields.io/badge/platform-linux%20%7C%20macos%20%7C%20wsl-lightgrey.svg)](README.md#system-requirements)
@@ -290,7 +290,7 @@ The container runs with specific security constraints:
 
 #### Additional Security Settings
 - `--security-opt=no-new-privileges`: Prevents privilege escalation
-- `--memory 2g`: Limits container to 2GB RAM (configurable)
+- `--memory 4g`: Limits container to 4GB RAM (configurable)
 - `--cpus 2`: Limits container to 2 CPU cores (configurable)
 
 ### 5. Network Access
