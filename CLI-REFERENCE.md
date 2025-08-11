@@ -59,6 +59,33 @@ cbox --verify
 # ✓ Claude authentication found
 ```
 
+#### `-e VAR` or `-e VAR=value`
+Pass environment variables to the container. Supports two formats:
+- `-e VAR`: Pass variable from host environment (value taken from host)
+- `-e VAR=value`: Set specific value directly
+
+**New in v1.2.0**: Explicit control over environment variable passthrough.
+
+```bash
+# Pass variables from host environment
+export AWS_PROFILE=production
+cbox -e AWS_PROFILE -e AWS_REGION
+
+# Set specific values
+cbox -e "DEBUG=true" -e "LOG_LEVEL=verbose"
+
+# Mix both formats
+cbox -e AWS_PROFILE -e "ANTHROPIC_MODEL=claude-opus-4-1"
+
+# Multiple variables for AWS Bedrock
+cbox -e AWS_PROFILE -e AWS_REGION -e CLAUDE_CODE_USE_BEDROCK
+```
+
+**Important notes:**
+- No automatic passthrough - you must explicitly specify each variable
+- Empty or unset variables produce a warning in verbose mode
+- Use multiple `-e` flags to pass multiple variables
+- Values with spaces should be quoted: `-e "MY_VAR=value with spaces"`
 
 ## Arguments
 
