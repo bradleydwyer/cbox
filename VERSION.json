@@ -1,0 +1,15 @@
+{
+  "version": "1.4.0",
+  "release_date": "2025-08-11",
+  "min_docker_version": "20.10.0",
+  "claude_code_min": "1.0.0",
+  "security_update": false,
+  "changelog": "Auto-update notifications and Claude Code self-update support",
+  "features": [
+    "Claude Code self-updates within containers",
+    "Non-intrusive update notifications",
+    "GitHub API-based update checking with tool fallbacks",
+    "Security mode integration",
+    "Persistent npm directories for faster container startup"
+  ]
+}

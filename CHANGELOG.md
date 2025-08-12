@@ -7,6 +7,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2025-08-11
+
+### Added
+- **Auto-Update Notifications**: Non-intrusive update checking and notifications
+  - Daily update checks via GitHub API with fallback to curl, wget, python
+  - Respects security modes (disabled in paranoid mode)
+  - New CLI commands: `--update`, `--update-check`, `--update-skip`
+  - 24-hour cache to prevent excessive API calls
+  - User can disable with `CBOX_NO_UPDATE_CHECK=1`
+- **Claude Code Self-Updates**: Claude Code can now update itself within containers
+  - Persistent npm directory mounted at `~/.cache/cbox/npm-user`
+  - Claude Code installed to user-owned directory on first run
+  - Auto-updates work without rebuilding Docker image
+  - Significantly reduces update friction for frequent Claude Code releases
+
+### Changed
+- **Claude Code Installation**: Moved from build-time to runtime installation
+  - Removed global npm install from Dockerfile
+  - Added user-space npm installation in entrypoint
+  - Creates persistent `/opt/npm-user` directory with proper permissions
+  - First run includes one-time Claude Code installation (~30 seconds)
+- **Volume Mounts**: Added persistent directories for npm packages
+  - `~/.cache/cbox/npm-user` → `/opt/npm-user` (Claude Code installation)
+  - `~/.cache/cbox/npm-cache` → `/opt/npm-user/cache` (npm cache)
+- **cbox-update Script**: Enhanced to work with new architecture
+  - Now mentions Claude Code will update automatically
+  - Maintains existing Docker rebuild functionality
+
+### Security
+- **Container Blast Radius Reduction**: Self-updates are safer in containers than host
+  - Limited filesystem access (only mounted project directory)
+  - No access to SSH keys/configs unless explicitly mounted
+  - Process isolation through container boundaries
+  - Cannot modify host npm packages or PATH
+- **Update Check Security**: Secure GitHub API integration
+  - HTTPS-only requests with timeout limits
+  - Input validation on all API responses
+  - No telemetry or user tracking
+  - Respects paranoid mode restrictions
+
+### Technical
+- **Backward Compatibility**: 100% compatible with v1.3.0
+  - All existing commands and options work identically
+  - Environment variables preserved
+  - Security modes unchanged
+  - No breaking changes to user workflows
+- **Performance**: Minimal overhead for new features
+  - Update checks run in background (non-blocking)
+  - Claude Code installation cached after first run
+  - npm packages persist across container restarts
+
 ### Fixed
 - **Critical Volume Mount Bug**: Fixed volume array initialization that was overwriting mounts
   - Changed `vols=` to `vols+=` to properly append volume mounts (lines 954, 957)
