@@ -1,6 +1,6 @@
 # cbox - Claude Code Sandbox
 
-[![Version](https://img.shields.io/badge/version-1.3.0-blue.svg)](https://github.com/bradleydwyer/cbox/releases)
+[![Version](https://img.shields.io/badge/version-1.4.0-blue.svg)](https://github.com/bradleydwyer/cbox/releases)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Docker](https://img.shields.io/badge/docker-%3E%3D20.10-blue.svg)](https://www.docker.com/)
 [![Platform](https://img.shields.io/badge/platform-linux%20%7C%20macos%20%7C%20wsl-lightgrey.svg)](README.md#system-requirements)
@@ -507,7 +507,7 @@ cbox checks for updates daily and notifies you when new versions are available:
 # Check for updates immediately
 cbox --update-check
 
-# Show update instructions
+# Auto-update cbox to latest version
 cbox --update
 
 # Skip update notifications for 7 days
@@ -523,6 +523,22 @@ export CBOX_NO_UPDATE_CHECK=1
 - Security-aware: Disabled in paranoid mode
 - Respects your preferences: Can be disabled entirely
 - Uses GitHub API with fallbacks to curl, wget, or python
+
+### Auto-Update Safety Features
+
+The `--update` command includes multiple safety checks to protect your work:
+
+**For Git Installations:**
+- **Branch Protection**: Only updates from main branch (prevents losing feature work)
+- **Uncommitted Changes Detection**: Won't update if you have uncommitted changes
+- **Repository Validation**: Verifies it's actually updating the cbox repository
+- **Safe Merging**: Uses `--ff-only` to ensure clean, fast-forward updates
+- **User Confirmation**: Always asks before making changes
+
+**For Standalone Installations:**
+- **Secure Download**: Uses HTTPS to download installer from GitHub
+- **User Confirmation**: Asks permission before replacing installation
+- **Automatic Cleanup**: Removes temporary files after update
 
 ### How Updates Work
 
@@ -550,7 +566,7 @@ git pull origin main
 curl -fsSL https://raw.githubusercontent.com/bradleydwyer/cbox/main/install.sh | bash
 
 # Or use the update helper
-cbox --update  # Shows update instructions
+cbox --update  # Performs auto-update (with confirmation prompt)
 ```
 
 ### Updating Claude Code CLI

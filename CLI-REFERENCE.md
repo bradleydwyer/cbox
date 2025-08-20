@@ -152,12 +152,29 @@ cbox --network none --ssh-agent false --read-only ~/suspicious-code
 ### Update Options (New in v1.4.0)
 
 #### `--update`
-Display update instructions for cbox. Shows multiple installation methods and next steps.
+Automatically update cbox to the latest version. This command intelligently detects your installation method and performs the appropriate update.
+
+**For git installations:**
+- Must be on main branch (prevents accidental loss of development work)
+- Checks for uncommitted changes before proceeding
+- Uses `git pull --ff-only` for safe, fast-forward only updates
+- Optionally rebuilds Docker image after successful update
+
+**For standalone installations:**
+- Downloads and runs the latest installer from GitHub
+- Replaces current installation with latest version
+- Suggests running `--verify` to rebuild Docker image
 
 ```bash
 cbox --update
-# Shows installation commands and links to latest release
+# Prompts for confirmation then updates cbox to latest version
 ```
+
+**Safety features:**
+- Branch verification prevents updates from feature branches
+- Uncommitted changes detection prevents losing work
+- Repository validation ensures updating the correct project
+- User confirmation required before making changes
 
 #### `--update-check`
 Check for available updates immediately, bypassing the normal 24-hour cache.
