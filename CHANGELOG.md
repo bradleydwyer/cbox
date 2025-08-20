@@ -7,7 +7,78 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2025-08-11
+
+### Added
+- **Auto-Update System**: Complete auto-update functionality with safety checks
+  - `--update`: Performs actual auto-update (not just instructions)
+    - Detects installation method (git vs standalone)
+    - Git: Requires main branch, checks uncommitted changes, uses --ff-only
+    - Standalone: Downloads and runs installer script
+    - Includes user confirmation prompts for safety
+  - `--update-check`: Forces immediate update check
+  - `--update-skip`: Disables notifications for 7 days
+  - Daily update checks via GitHub API with fallback to curl, wget, python
+  - 24-hour cache to prevent excessive API calls
+  - Respects security modes (disabled in paranoid mode)
+  - User can disable with `CBOX_NO_UPDATE_CHECK=1`
+- **Claude Code Self-Updates**: Claude Code can now update itself within containers
+  - Persistent npm directory mounted at `~/.cache/cbox/npm-user`
+  - Claude Code installed to user-owned directory on first run
+  - Auto-updates work without rebuilding Docker image
+  - Significantly reduces update friction for frequent Claude Code releases
+
+### Changed
+- **Claude Code Installation**: Moved from build-time to runtime installation
+  - Removed global npm install from Dockerfile
+  - Added user-space npm installation in entrypoint
+  - Creates persistent `/opt/npm-user` directory with proper permissions
+  - First run includes one-time Claude Code installation (~30 seconds)
+- **Volume Mounts**: Added persistent directories for npm packages
+  - `~/.cache/cbox/npm-user` → `/opt/npm-user` (Claude Code installation)
+  - `~/.cache/cbox/npm-cache` → `/opt/npm-user/cache` (npm cache)
+- **cbox-update Script**: Enhanced to work with new architecture
+  - Now mentions Claude Code will update automatically
+  - Maintains existing Docker rebuild functionality
+
+### Security
+- **Container Blast Radius Reduction**: Self-updates are safer in containers than host
+  - Limited filesystem access (only mounted project directory)
+  - No access to SSH keys/configs unless explicitly mounted
+  - Process isolation through container boundaries
+  - Cannot modify host npm packages or PATH
+- **Update Check Security**: Secure GitHub API integration
+  - HTTPS-only requests with timeout limits
+  - Input validation on all API responses
+  - No telemetry or user tracking
+  - Respects paranoid mode restrictions
+
+### Technical
+- **Backward Compatibility**: 100% compatible with v1.3.0
+  - All existing commands and options work identically
+  - Environment variables preserved
+  - Security modes unchanged
+  - No breaking changes to user workflows
+- **Performance**: Minimal overhead for new features
+  - Update checks run in background (non-blocking)
+  - Claude Code installation cached after first run
+  - npm packages persist across container restarts
+
+### Safety Features (Auto-Update)
+- **Repository Protection**: Validates that update target is actually the cbox repository
+- **Branch Protection**: Only allows updates from main branch to prevent losing development work
+- **Work Protection**: Detects uncommitted changes and prevents updates until resolved
+- **Safe Merging**: Uses `--ff-only` flag to ensure clean fast-forward updates only
+- **User Confirmation**: Requires explicit user consent before making any changes
+- **Installation Detection**: Intelligently identifies git vs standalone installations
+- **Fallback Methods**: Provides alternative update paths if primary method fails
+
 ### Fixed
+- **Update Notification Alignment**: Fixed printf formatting for perfect box alignment
+- **Auto-Update Implementation**: Replaced instruction display with actual update functionality
+  - Git installations now perform `git pull --ff-only origin main`
+  - Standalone installations download and run latest installer
+  - Both methods include safety checks and user confirmations
 - **Critical Volume Mount Bug**: Fixed volume array initialization that was overwriting mounts
   - Changed `vols=` to `vols+=` to properly append volume mounts (lines 954, 957)
   - This bug was preventing GitHub config directory from being mounted correctly

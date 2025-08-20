@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# cbox-update: Force update and rebuild cbox Docker image
+# cbox-update: Update cbox Docker environment and Claude Code
 set -euo pipefail
 
 echo "cbox-update: Updating cbox Docker environment..."
@@ -24,7 +24,8 @@ fi
 echo "  → Clearing Docker build cache..."
 docker builder prune -f >/dev/null 2>&1 || true
 
-echo "  → Rebuilding cbox image with latest configuration..."
+echo "  → Claude Code will update automatically on next run"
+echo "  → Rebuilding with latest configuration..."
 
 # Force rebuild with environment variable
 CBOX_REBUILD=1 exec cbox "$@"

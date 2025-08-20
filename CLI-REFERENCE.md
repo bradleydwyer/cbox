@@ -1,6 +1,6 @@
 # cbox CLI Reference
 
-Complete command-line interface reference for cbox v1.3.0
+Complete command-line interface reference for cbox v1.4.0
 
 ## Synopsis
 
@@ -28,7 +28,7 @@ Display version information and exit.
 
 ```bash
 cbox --version
-# Output: cbox version 1.3.0
+# Output: cbox version 1.4.0
 ```
 
 #### `--verbose`
@@ -149,6 +149,55 @@ cbox --network bridge --read-only ~/analysis
 cbox --network none --ssh-agent false --read-only ~/suspicious-code
 ```
 
+### Update Options (New in v1.4.0)
+
+#### `--update`
+Automatically update cbox to the latest version. This command intelligently detects your installation method and performs the appropriate update.
+
+**For git installations:**
+- Must be on main branch (prevents accidental loss of development work)
+- Checks for uncommitted changes before proceeding
+- Uses `git pull --ff-only` for safe, fast-forward only updates
+- Optionally rebuilds Docker image after successful update
+
+**For standalone installations:**
+- Downloads and runs the latest installer from GitHub
+- Replaces current installation with latest version
+- Suggests running `--verify` to rebuild Docker image
+
+```bash
+cbox --update
+# Prompts for confirmation then updates cbox to latest version
+```
+
+**Safety features:**
+- Branch verification prevents updates from feature branches
+- Uncommitted changes detection prevents losing work
+- Repository validation ensures updating the correct project
+- User confirmation required before making changes
+
+#### `--update-check`
+Check for available updates immediately, bypassing the normal 24-hour cache.
+
+```bash
+cbox --update-check
+# Forces check for latest version on GitHub
+```
+
+#### `--update-skip`
+Skip update notifications for 7 days. Useful when you want to focus without update reminders.
+
+```bash
+cbox --update-skip
+# Disables update notifications for one week
+```
+
+**Update Behavior:**
+- Update checks respect security modes (disabled in paranoid mode)
+- Notifications appear at most once per day
+- Checks use GitHub API with fallback to multiple tools (curl, wget, python)
+- User can disable all checks with `CBOX_NO_UPDATE_CHECK=1`
+
 ## Arguments
 
 ### `DIRECTORY`
@@ -223,6 +272,14 @@ CBOX_VERBOSE=1 cbox
 # Equivalent to: cbox --verbose
 ```
 
+#### `CBOX_NO_UPDATE_CHECK`
+Disable automatic update checking. Set to `1` to disable all update checks.
+
+```bash
+CBOX_NO_UPDATE_CHECK=1 cbox
+# Completely disables update notifications and checks
+```
+
 #### `XDG_CACHE_HOME`
 Override cache directory location. Default: `~/.cache`
 
@@ -265,6 +322,8 @@ cbox automatically mounts the following volumes:
 | `~/.config/gh` | `/home/host/.config/gh` | read-only | GitHub CLI config*** |
 | `~/.ssh/known_hosts` | `/home/host/.ssh/known_hosts` | read-only | SSH known hosts |
 | `~/.git-credentials` | `/home/host/.git-credentials` | read-only | Git credentials |
+| `~/.cache/cbox/npm-user` | `/opt/npm-user` | read-write | Claude Code installation (v1.4.0+) |
+| `~/.cache/cbox/npm-cache` | `/opt/npm-user/cache` | read-write | NPM cache (v1.4.0+) |
 
 **Notes:**
 - \* Read-only in paranoid mode, read-write in standard/restricted modes
@@ -287,9 +346,11 @@ cbox automatically mounts the following volumes:
 - wget
 - procps (process utilities)
 - gosu (user switching)
-- @anthropic-ai/claude-code (latest)
 - gh (GitHub CLI)
 - hermit (package manager)
+
+### Runtime Installation
+- @anthropic-ai/claude-code (latest) - Installed to persistent user directory on first run, auto-updates
 
 ### Resource Limits
 - Memory: 2GB

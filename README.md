@@ -1,6 +1,6 @@
 # cbox - Claude Code Sandbox
 
-[![Version](https://img.shields.io/badge/version-1.3.0-blue.svg)](https://github.com/bradleydwyer/cbox/releases)
+[![Version](https://img.shields.io/badge/version-1.4.0-blue.svg)](https://github.com/bradleydwyer/cbox/releases)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Docker](https://img.shields.io/badge/docker-%3E%3D20.10-blue.svg)](https://www.docker.com/)
 [![Platform](https://img.shields.io/badge/platform-linux%20%7C%20macos%20%7C%20wsl-lightgrey.svg)](README.md#system-requirements)
@@ -486,16 +486,87 @@ Each shared resource serves a specific purpose:
 
 If you're uncomfortable with any of these shared resources, **do not use cbox**.
 
-## Maintenance
+## Auto-Update System (v1.4.0+)
 
-### Updating cbox
+cbox includes an intelligent auto-update system that handles both cbox updates and Claude Code updates:
+
+### Claude Code Auto-Updates
+
+Claude Code can now update itself within containers without rebuilding Docker images:
+
+- **Automatic**: Claude Code updates itself when new versions are available
+- **Persistent**: Updates are saved to `~/.cache/cbox/npm-user` and persist across runs
+- **Fast**: After first installation (~30 seconds), subsequent runs are instant
+- **Zero maintenance**: No more rebuilding Docker images for Claude Code updates
+
+### cbox Update Notifications
+
+cbox checks for updates daily and notifies you when new versions are available:
 
 ```bash
-# Pull latest version
+# Check for updates immediately
+cbox --update-check
+
+# Auto-update cbox to latest version
+cbox --update
+
+# Skip update notifications for 7 days
+cbox --update-skip
+
+# Disable update checks completely
+export CBOX_NO_UPDATE_CHECK=1
+```
+
+**Update behavior**:
+- Checks run once per day (24-hour cache)
+- Non-intrusive: Shows a simple notification, doesn't block work
+- Security-aware: Disabled in paranoid mode
+- Respects your preferences: Can be disabled entirely
+- Uses GitHub API with fallbacks to curl, wget, or python
+
+### Auto-Update Safety Features
+
+The `--update` command includes multiple safety checks to protect your work:
+
+**For Git Installations:**
+- **Branch Protection**: Only updates from main branch (prevents losing feature work)
+- **Uncommitted Changes Detection**: Won't update if you have uncommitted changes
+- **Repository Validation**: Verifies it's actually updating the cbox repository
+- **Safe Merging**: Uses `--ff-only` to ensure clean, fast-forward updates
+- **User Confirmation**: Always asks before making changes
+
+**For Standalone Installations:**
+- **Secure Download**: Uses HTTPS to download installer from GitHub
+- **User Confirmation**: Asks permission before replacing installation
+- **Automatic Cleanup**: Removes temporary files after update
+
+### How Updates Work
+
+1. **Claude Code Updates**: 
+   - First run installs Claude Code to a persistent user directory
+   - Claude Code checks for updates on each startup
+   - Updates are applied automatically without user intervention
+   - No Docker rebuild needed
+
+2. **cbox Updates**:
+   - Daily check via GitHub Releases API
+   - Shows notification when new version available
+   - User chooses when to update using provided commands
+   - Updates require running install script or git pull
+
+## Maintenance
+
+### Manual cbox Updates
+
+```bash
+# Pull latest version (if cloned)
 git pull origin main
 
 # Or re-run installation script
 curl -fsSL https://raw.githubusercontent.com/bradleydwyer/cbox/main/install.sh | bash
+
+# Or use the update helper
+cbox --update  # Performs auto-update (with confirmation prompt)
 ```
 
 ### Updating Claude Code CLI
@@ -614,13 +685,15 @@ Try:
 - Environment variable passthrough (CBOX_REBUILD, CBOX_VERBOSE)
 - Basic command-line options (--help, --version, --verbose, --verify, --shell)
 - Installation and update scripts
+- **Security modes** (standard, restricted, paranoid) with network and SSH agent control
+- **Auto-update notifications** via GitHub API with tool fallbacks
+- **Claude Code self-updates** within containers using persistent npm directories
+- **Update management commands** (--update, --update-check, --update-skip)
 
 ### 📋 Planned Features (Not Yet Implemented)
 - **Configuration file support** (.cbox.json parsing)
 - **Telemetry system** for usage analytics
 - **Custom Dockerfile support**
-- **Security modes** (restricted, paranoid)
-- **Auto-update functionality**
 - **Advanced telemetry commands** (--telemetry-status, etc.)
 
 Note: The `.cbox.json.example` file shows the planned configuration format, but this functionality is not yet implemented in the current version.
