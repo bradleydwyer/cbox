@@ -1123,7 +1123,7 @@ if [[ ! -f "$DOCKERFILE" ]]; then
 FROM node:20-bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git openssh-client ca-certificates tini bash less curl wget procps build-essential \
-    pkg-config libssl-dev sudo ripgrep && \
+    pkg-config libssl-dev sudo ripgrep jq && \
     rm -rf /var/lib/apt/lists/*
 # Create user npm directory structure (Claude Code will be installed at runtime)
 RUN mkdir -p /opt/npm-user/lib/node_modules /opt/npm-user/bin /opt/npm-user/cache && \
